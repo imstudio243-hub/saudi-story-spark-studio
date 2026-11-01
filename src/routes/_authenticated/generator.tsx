@@ -83,7 +83,7 @@ function GeneratorPage() {
   // Resume an existing generator project. Returns the restored scene states so the
   // caller can auto-continue unfinished work without waiting for React state.
   const resume = useCallback(
-    async (id: string): Promise<SceneState[] | null> => {
+    async (id: string): Promise<{ states: SceneState[]; plan: GenPlan } | null> => {
       const { data: p } = await supabase.from("projects").select("*").eq("id", id).single();
       if (!p) return null;
       const gp = (p.data as any)?.genPlan as GenPlan | undefined;
@@ -130,7 +130,7 @@ function GeneratorPage() {
         });
         setScenes(states);
         setStep(states.every((s) => s.status === "ready") && states.length > 0 ? "done" : "plan");
-        return states;
+        return { states, plan: gp };
       }
       return null;
     },
