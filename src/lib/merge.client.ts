@@ -2,33 +2,22 @@
 // with acrossfades into one MP4, via ffmpeg.wasm (single-threaded core, no SharedArrayBuffer),
 // loaded lazily from CDN.
 
-const FFMPEG_URL = "https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js";
-const CORE_URL = "https://unpkg.com/@ffmpeg/core-st@0.11.0/dist/ffmpeg-core.js";
+import { createFFmpeg } from "@ffmpeg/ffmpeg";
+import wasmAsset from "@/assets/ffmpeg-core.wasm.asset.json";
+
+const CORE_PATH = "/ffmpeg/ffmpeg-core.js"; // single-threaded core served same-origin (no SharedArrayBuffer needed)
 const XFADE = 0.5; // video crossfade seconds between shots
 const AFADE = 0.3; // audio crossfade seconds
 
 let ffmpeg: any = null;
 let loading: Promise<any> | null = null;
 
-function loadScript(src: string) {
-  return new Promise<void>((resolve, reject) => {
-    if (document.querySelector(`script[src="${src}"]`)) return resolve();
-    const s = document.createElement("script");
-    s.src = src;
-    s.onload = () => resolve();
-    s.onerror = () => reject(new Error("تعذر تحميل مكتبة الدمج."));
-    document.head.appendChild(s);
-  });
-}
-
 async function getFfmpeg(onProgress?: (msg: string) => void) {
   if (ffmpeg) return ffmpeg;
   if (!loading) {
     loading = (async () => {
       onProgress?.("جارٍ تحميل أداة الدمج (أول مرة فقط)…");
-      await loadScript(FFMPEG_URL);
-      const { createFFmpeg } = (window as any).FFmpeg;
-      const f = createFFmpeg({ log: false, corePath: CORE_URL });
+      const f = createFFmpeg({ log: false, corePath: CORE_PATH, wasmPath: wasmAsset.url });
       await f.load();
       ffmpeg = f;
       return f;
