@@ -58,13 +58,28 @@ export async function mergeScenes(
       if (!audioUrl) throw new Error("التعليق الصوتي غير مكتمل.");
       onProgress?.(`جارٍ تجهيز الصوت والكتابة ${i + 1}/${n}…`);
       const [video, audio] = await Promise.all([fetchBytes(scene.videoUrl), fetchBytes(audioUrl)]);
-      const info = await videoInfo(video);
+      await f.writeFile(`v${i}.mp4`, video);
+      cleanup.push(`v${i}.mp4`);
+      // Browser codec support differs. FFmpeg can still read/export a valid source MP4.
+      const info = await videoInfo(video).catch(async () => {
+        const name = `info${i}.json`;
+        cleanup.push(name);
+        const code = await f.ffprobe(["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height:format=duration", "-of", "json", `v${i}.mp4`, "-o", name]);
+        if (code !== 0) throw new Error("تعذر قراءة الفيديو الأصلي.");
+        const file = await f.readFile(name);
+        if (!(file instanceof Uint8Array)) throw new Error("تعذر قراءة معلومات الفيديو.");
+        const meta = JSON.parse(new TextDecoder().decode(file));
+        const width = Number(meta.streams?.[0]?.width);
+        const height = Number(meta.streams?.[0]?.height);
+        const duration = Number(meta.format?.duration);
+        if (!width || !height || !Number.isFinite(duration)) throw new Error("ملف الفيديو غير صالح.");
+        return { width, height, duration };
+      });
       const decoded = await audioContext.decodeAudioData(new Uint8Array(audio).buffer);
       const lead = i > 0 ? XFADE : 0;
       const duration = narrationDuration(Math.max(info.duration, scene.duration), decoded.duration, i, n);
-      await f.writeFile(`v${i}.mp4`, video);
       await f.writeFile(`a${i}.wav`, audio);
-      cleanup.push(`v${i}.mp4`, `a${i}.wav`);
+      cleanup.push(`a${i}.wav`);
       prepared.push({ ...info, duration, audioDuration: decoded.duration, lead, text: scene.voiceover ?? "" });
     }
     const args: string[] = [];
