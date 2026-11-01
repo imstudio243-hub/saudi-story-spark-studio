@@ -481,7 +481,7 @@ function GeneratorPage() {
           </div>
           {(step === "plan" || (step === "done" && !allReady)) && (
             <div className="space-y-2">
-              <Button variant="luxe" onClick={generateAll} disabled={busy} className="h-11 w-full">
+              <Button variant="luxe" onClick={() => generateAll()} disabled={busy} className="h-11 w-full">
                 <Clapperboard /> {step === "done" ? "استكمال اللقطات المتبقية والصوت" : `ابدأ توليد الفيديو (${plan.scenes.length} لقطات + الصوت)`}
               </Button>
               <p className="text-center text-xs text-muted-foreground">
