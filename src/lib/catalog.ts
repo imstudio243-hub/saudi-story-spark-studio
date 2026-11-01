@@ -35,6 +35,7 @@ export type GenScene = {
   video_prompt: string;
   voiceover: string;
   duration: number;
+  transition: string;
 };
 
 export type GenPlan = {
