@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { planGenerator, startSceneVideo, generateSceneVoice, pollJob, findRunningSceneJob } from "@/lib/studio.functions";
 import { ASPECTS, DELIVERY, DIALECTS, GEN_DURATIONS, RESOLUTIONS, VOICES, type GenPlan } from "@/lib/catalog";
+import { formatCredits, planTotalCredits, sceneTotalCredits } from "@/lib/gen-cost";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -327,7 +328,7 @@ function GeneratorPage() {
             <Label>مدة الفيديو</Label>
             <select value={duration} onChange={(e) => setDuration(Number(e.target.value) as 10 | 20 | 30)} className={selectCls} disabled={step === "generating"}>
               {GEN_DURATIONS.map((d) => (
-                <option key={d.id} value={d.id}>{d.label} · {d.minShots}–{d.maxShots} لقطات</option>
+                <option key={d.id} value={d.id}>{d.label} · {d.minShots}–{d.maxShots} لقطات · ~{formatCredits(planTotalCredits([{ duration: d.id }], "720p"))} رصيد</option>
               ))}
             </select>
           </div>
@@ -426,7 +427,7 @@ function GeneratorPage() {
               return (
                 <div key={i} className="glass space-y-2 rounded-xl p-4">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="font-bold">لقطة {i + 1}: {s.title} <span className="text-xs font-normal text-muted-foreground">({s.duration} ث)</span></p>
+                    <p className="font-bold">لقطة {i + 1}: {s.title} <span className="text-xs font-normal text-muted-foreground">({s.duration} ث · ~{formatCredits(sceneTotalCredits(s.duration, resolution))} رصيد فيديو + صوت)</span></p>
                     {st && step !== "describe" && step !== "plan" && (
                       <span className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs ${st.status === "ready" ? "bg-emerald-500/15 text-emerald-400" : st.status === "failed" ? "bg-red-500/15 text-red-400" : "bg-gold/15 text-gold"}`}>
                         {(st.status === "rendering" || st.status === "voicing") && <Loader2 className="h-3 w-3 animate-spin" />}
@@ -451,8 +452,18 @@ function GeneratorPage() {
             })}
           </div>
           {(step === "plan" || (step === "done" && !allReady)) && (
-            <Button variant="luxe" onClick={generateAll} disabled={busy} className="h-11 w-full">
-              <Clapperboard /> {step === "done" ? "استكمال اللقطات المتبقية والصوت" : `ابدأ توليد الفيديو (${plan.scenes.length} لقطات + الصوت)`}
+            <div className="space-y-2">
+              <Button variant="luxe" onClick={generateAll} disabled={busy} className="h-11 w-full">
+                <Clapperboard /> {step === "done" ? "استكمال اللقطات المتبقية والصوت" : `ابدأ توليد الفيديو (${plan.scenes.length} لقطات + الصوت)`}
+              </Button>
+              <p className="text-center text-xs text-muted-foreground">
+                التكلفة التقديرية: ~{formatCredits(planTotalCredits(plan.scenes, resolution))} رصيد ({resolution === "720p" ? "جودة 720p الاقتصادية" : "جودة 1080p الأعلى تكلفة"}) — وضع اقتصادي تلقائي: أقل عدد لقطات بأطول مدة يدعمها النموذج.
+              </p>
+            </div>
+          )}
+          {allReady && (
+            <Button variant="luxe" onClick={downloadMerged} disabled={merging !== null} className="h-12 w-full">
+              {merging ? <Loader2 className="animate-spin" /> : <Download />} {merging ?? `دمج اللقطات (${plan.scenes.length}) بالترتيب مع الصوت في فيديو واحد`}
             </Button>
           )}
           {step === "generating" && (

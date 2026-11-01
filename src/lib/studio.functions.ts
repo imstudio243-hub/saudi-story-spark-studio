@@ -439,7 +439,8 @@ export const planGenerator = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    const range = ({ 10: [3, 4], 20: [6, 8], 30: [8, 12] } as Record<number, [number, number]>)[data.duration]!;
+    // Economy mode: fewest, longest clips the video model allows (each clip costs credits).
+    const range = ({ 10: [1, 2], 20: [2, 3], 30: [3, 4] } as Record<number, [number, number]>)[data.duration]!;
     const { data: assets } = await supabase
       .from("assets")
       .select("id, storage_path, mime")
@@ -458,7 +459,7 @@ export const planGenerator = createServerFn({ method: "POST" })
     // Server-side verification: clamp shot count and normalize durations to sum exactly to the requested total.
     let scenes = plan.scenes.slice(0, range[1]);
     while (scenes.length > range[0] && Math.floor(data.duration / scenes.length) < 3) scenes.pop();
-    if (scenes.length < 2) throw new Error("لم يُنتج النموذج خطة لقطات صالحة. أعد المحاولة.");
+    if (scenes.length < 1) throw new Error("لم يُنتج النموذج خطة لقطات صالحة. أعد المحاولة.");
     const n = scenes.length;
     // Shots overlap by 0.5s crossfades at merge time, so plan slightly longer to land on the requested total.
     const target = data.duration + Math.round((n - 1) * 0.5);
