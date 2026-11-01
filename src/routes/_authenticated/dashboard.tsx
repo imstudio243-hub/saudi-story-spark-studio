@@ -53,7 +53,7 @@ function Dashboard() {
       </div>
 
       <form onSubmit={create} className="glass space-y-4 rounded-2xl p-5">
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {KINDS.map((k) => (
             <button type="button" key={k.id} onClick={() => setKind(k.id)} className={`flex flex-col items-center gap-2 rounded-xl border p-3 text-sm transition ${kind === k.id ? "border-gold/60 bg-gold/10 text-gold" : "border-border text-muted-foreground"}`}>
               <k.icon className="h-5 w-5" /> {k.label}
@@ -80,7 +80,13 @@ function Dashboard() {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {projects.map((p) => {
             const K = KINDS.find((k) => k.id === p.kind) ?? KINDS[0];
-            return (
+            return p.kind === "generator" ? (
+              <Link key={p.id} to="/generator" search={{ project: p.id }} className="glass card-hover group animate-pop rounded-2xl p-5">
+                <K.icon className="h-6 w-6 text-gold transition-transform duration-300 group-hover:scale-110" />
+                <h3 className="mt-3 font-bold">{p.name}</h3>
+                <p className="mt-1 text-xs text-muted-foreground">{K.label} · {STATUS[p.status] ?? p.status} · {new Date(p.updated_at).toLocaleDateString("ar-SA")}</p>
+              </Link>
+            ) : (
               <Link key={p.id} to="/projects/$id" params={{ id: p.id }} className="glass card-hover group animate-pop rounded-2xl p-5">
                 <K.icon className="h-6 w-6 text-gold transition-transform duration-300 group-hover:scale-110" />
                 <h3 className="mt-3 font-bold">{p.name}</h3>
