@@ -355,13 +355,14 @@ const genPlanSchema = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["title", "description", "video_prompt", "voiceover", "duration"],
+        required: ["title", "description", "video_prompt", "voiceover", "duration", "transition"],
         properties: {
           title: { type: "string" },
           description: { type: "string" },
           video_prompt: { type: "string" },
           voiceover: { type: "string" },
           duration: { type: "number" },
+          transition: { type: "string" },
         },
       },
     },
@@ -383,10 +384,24 @@ const GEN_RULES = `أنت مخرج فيديو محترف في iM STUDIO. مهم�
 - المشاهد مترابطة: كل مشهد يكمل الذي قبله ويخدم الهدف النهائي، مع انتقال منطقي بينها.
 - أضف: "Consider micro-detail, cinematic lighting, realistic reflections and smooth camera motion."
 
-قواعد voiceover لكل مشهد:
-- نص تعليق صوتي عربي يشرح ما يظهر في المشهد نفسه بالتزامن معه.
-- الطول: حوالي كلمتين لكل ثانية من مدة المشهد، لا أكثر، حتى يتسع الصوت للمدة.
-- التعليق كله يلتزم بموضوع الوصف ولا يخرج عنه.`;
+قواعد voiceover لكل لقطة:
+- نص تعليق صوتي عربي يشرح ما يظهر في اللقطة نفسها بالتزامن معها.
+- الطول: حوالي كلمتين لكل ثانية من مدة اللقطة، لا أكثر، حتى يتسع الصوت للمدة دون تسريع مزعج.
+- كل لقطة جملة قصيرة مكتملة المعنى، والتعليق كله موزع على كامل المدة دون قطع كلمات، ويلتزم بموضوع الوصف ولا يخرج عنه.
+
+قواعد التقطيع والجودة:
+- قسّم الفيديو إلى لقطات قصيرة متنوعة (زوايا وحركات كاميرا وأحجام لقطات مختلفة) تخدم الموضوع نفسه، بترتيب منطقي من جذب الانتباه إلى الخاتمة، دون تكرار ممل أو لقطات حشو.
+- حافظ على هوية بصرية واحدة عبر كل اللقطات: كرّر في كل video_prompt الوصف نفسه حرفيًا للعناصر الثابتة (شكل الجهاز أو المنتج، الألوان، الإضاءة، اسم العلامة كما كتبه المستخدم).
+- ممنوع اختراع شعارات أو واجهات تطبيقات أو أرقام أو معلومات مالية غير موجودة في وصف المستخدم.
+- النص الظاهر على الشاشة: سطر واحد على الأكثر في الفيديو كله، ويكون اسم العلامة أو العنوان كما كتبه المستخدم حرفيًا بالعربية الصحيحة.
+- تحقق قبل الإخراج: كل لقطة مرتبطة بموضوع الوصف، الترتيب منطقي، مجموع المدد يساوي المدة المطلوبة بالضبط.
+
+قواعد الاستمرارية السينمائية بين اللقطات (حقل transition لكل لقطة):
+- الفيديو يجب أن يبدو عملًا واحدًا متصلًا، لا لقطات منفصلة. لكل لقطة اكتب في transition: كيف تبدأ اللقطة من الحالة التي انتهت عندها السابقة، وكيف تنتهي ممهدةً للقطة التالية (مثال: "تنتهي باقتراب الكاميرا من الشاشة حتى يملأ الضوء الأزرق الإطار، وتبدأ التالية بخروج الكاميرا من هذا الضوء").
+- اربط نهاية كل لقطة ببداية التالية بحركة كاميرا مستمرة أو عنصر بصري مشترك (ضوء، عنصر داخل المشهد، حركة جانبية، دوران). نوّع أسلوب الانتقال بين اللقطات ولا تكرر الحركة نفسها.
+- في video_prompt: ابدأ كل لقطة (عدا الأولى) بوصف حالة الافتتاح المستمرة من نهاية السابقة، واختم كل لقطة (عدا الأخيرة) بحركة الخروج الممهدة. لا تعد ضبط الكاميرا أو العناصر إلى نقطة البداية دون سبب.
+- حافظ على الشخصيات والعناصر نفسها (الملامح، الملابس، الألوان، الإضاءة، الخلفية) عبر اللقطات، وكرر وصفها حرفيًا في كل video_prompt.
+- اللقطة الأولى تبدأ جذبًا للانتباه، والأخيرة تنتهي بخاتمة متكاملة تكشف العلامة.`;
 
 export const planGenerator = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -400,8 +415,7 @@ export const planGenerator = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    const sceneCount = data.duration / 10;
-    const sceneLen = data.duration / sceneCount;
+    const range = ({ 10: [3, 4], 20: [6, 8], 30: [8, 12] } as Record<number, [number, number]>)[data.duration]!;
     const { data: assets } = await supabase
       .from("assets")
       .select("id, storage_path, mime")
@@ -413,11 +427,20 @@ export const planGenerator = createServerFn({ method: "POST" })
     }
     parts.unshift({
       type: "input_text",
-      text: `أنشئ خطة فيديو من ${sceneCount} ${sceneCount === 1 ? "مشهد" : "مشاهد"}، مدة كل مشهد ${sceneLen} ثوانٍ بالضبط (المدة الإجمالية ${data.duration} ثانية). وزّع القصة والتعليق الصوتي على المشاهد بشكل متناسق. اكتب رقم المدة في حقل duration لكل مشهد = ${sceneLen}.\n\nوصف المستخدم (التزم به حرفيًا):\n${data.description}`,
+      text: `أنشئ خطة فيديو من ${range[0]} إلى ${range[1]} لقطة قصيرة مترابطة ومتنوعة (المدة الإجمالية ${data.duration} ثانية بالضبط). مدة كل لقطة بين 3 و10 ثوانٍ، ومجموع مدد اللقطات يساوي ${data.duration} بالضبط. وزّع القصة والتعليق الصوتي على اللقطات كاملة بشكل متناسق.\n\nوصف المستخدم (التزم به حرفيًا):\n${data.description}`,
     });
     const text = await respond({ instructions: GEN_RULES, messages: [{ role: "user", content: parts }], schema: { name: "gen_plan", schema: genPlanSchema } });
     const plan = JSON.parse(text) as GenPlan;
-    plan.scenes = plan.scenes.slice(0, sceneCount).map((s) => ({ ...s, duration: sceneLen }));
+    // Server-side verification: clamp shot count and normalize durations to sum exactly to the requested total.
+    let scenes = plan.scenes.slice(0, range[1]);
+    while (scenes.length > range[0] && Math.floor(data.duration / scenes.length) < 3) scenes.pop();
+    if (scenes.length < 2) throw new Error("لم يُنتج النموذج خطة لقطات صالحة. أعد المحاولة.");
+    const n = scenes.length;
+    // Shots overlap by 0.5s crossfades at merge time, so plan slightly longer to land on the requested total.
+    const target = data.duration + Math.round((n - 1) * 0.5);
+    const base = Math.max(3, Math.floor(target / n));
+    const rem = target - base * n;
+    plan.scenes = scenes.map((s, i) => ({ ...s, duration: base + (i >= n - rem ? 1 : 0) }));
     const { data: proj } = await supabase.from("projects").select("data").eq("id", data.projectId).single();
     await supabase
       .from("projects")
@@ -432,7 +455,7 @@ export const startSceneVideo = createServerFn({ method: "POST" })
   .inputValidator(
     z.object({
       projectId: z.string().uuid(),
-      sceneIndex: z.number().int().min(0).max(9),
+      sceneIndex: z.number().int().min(0).max(14),
       prompt: z.string().min(10).max(4000),
       assetIds: z.array(z.string().uuid()).max(3).default([]),
       duration: z.number().int().min(3).max(10),
@@ -468,9 +491,27 @@ export const startSceneVideo = createServerFn({ method: "POST" })
     }
   });
 
+/** Find a still-running video job for a scene so a reopened page re-attaches instead of duplicating. */
+export const findRunningSceneJob = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(z.object({ projectId: z.string().uuid(), sceneIndex: z.number().int().min(0).max(14) }))
+  .handler(async ({ data, context }) => {
+    const { data: job } = await context.supabase
+      .from("generation_jobs")
+      .select("id")
+      .eq("project_id", data.projectId)
+      .eq("kind", "video")
+      .eq("status", "running")
+      .eq("input->>sceneIndex", String(data.sceneIndex))
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    return { jobId: (job?.id as string | undefined) ?? null };
+  });
+
 export const generateSceneVoice = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator(voiceInput.extend({ sceneIndex: z.number().int().min(0).max(9) }))
+  .inputValidator(voiceInput.extend({ sceneIndex: z.number().int().min(0).max(14) }))
   .handler(async ({ data, context }) => {
     const asset = await makeVoice(context.supabase, context.userId, data);
     return { assetId: asset.id as string };
