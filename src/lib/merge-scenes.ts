@@ -64,8 +64,7 @@ export async function mergeScenes(
       const info = await videoInfo(video).catch(async () => {
         const name = `info${i}.json`;
         cleanup.push(name);
-        const code = await f.ffprobe(["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height:format=duration", "-of", "json", `v${i}.mp4`, "-o", name]);
-        if (code !== 0) throw new Error("تعذر قراءة الفيديو الأصلي.");
+        await f.ffprobe(["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height:format=duration", "-of", "json", "-o", name, `v${i}.mp4`]);
         const file = await f.readFile(name);
         if (!(file instanceof Uint8Array)) throw new Error("تعذر قراءة معلومات الفيديو.");
         const meta = JSON.parse(new TextDecoder().decode(file));
