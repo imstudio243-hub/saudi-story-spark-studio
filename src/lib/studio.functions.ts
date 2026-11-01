@@ -490,9 +490,11 @@ export const planGenerator = createServerFn({ method: "POST" })
     for (const a of assets ?? []) {
       parts.push({ type: "input_image", image_url: `data:${a.mime};base64,${await readAsset(supabase, a.storage_path)}` });
     }
+    const { data: projData } = await supabase.from("projects").select("data").eq("id", data.projectId).single();
+    const styleBrief = (projData?.data as any)?.styleBrief as string | undefined;
     parts.unshift({
       type: "input_text",
-      text: `أنشئ خطة فيديو من ${range[0]} إلى ${range[1]} لقطة قصيرة مترابطة ومتنوعة (المدة الإجمالية ${data.duration} ثانية بالضبط). مدة كل لقطة بين 3 و10 ثوانٍ، ومجموع مدد اللقطات يساوي ${data.duration} بالضبط. وزّع القصة والتعليق الصوتي على اللقطات كاملة بشكل متناسق.\n\nوصف المستخدم (التزم به حرفيًا):\n${data.description}`,
+      text: `أنشئ خطة فيديو من ${range[0]} إلى ${range[1]} لقطة قصيرة مترابطة ومتنوعة (المدة الإجمالية ${data.duration} ثانية بالضبط). مدة كل لقطة بين 3 و10 ثوانٍ، ومجموع مدد اللقطات يساوي ${data.duration} بالضبط. وزّع القصة والتعليق الصوتي على اللقطات كاملة بشكل متناسق.\n\nوصف المستخدم (التزم به حرفيًا):\n${data.description}${styleBrief ? `\n\nموجز أسلوب الفيديو المرجعي (قلّده بالكامل: الشخصية نفسها، الألوان، أسلوب النصوص على الشاشة، التنقلات، الإيقاع، وأسلوب الكلام — مع تغيير الموضوع إلى موضوع المستخدم فقط):\n${styleBrief}\n\nالتزامات إلزامية عند وجود موجز الأسلوب:\n- الصق وصف CHARACTER_EN حرفيًا في بداية كل video_prompt لضمان ثبات الشخصية 100% عبر اللقطات.\n- استخدم أسلوب النصوص والشريط السفلي نفسه في توجيه المشاهد، ووزّع التعليق الصوتي بأسلوب الكلام نفسه (اللهجة والنبرة وطول الجمل).\n- اجعل transition لكل لقطة يحاكي تنقلات الفيديو المرجعي.` : ""}`,
     });
     const text = await respond({ instructions: GEN_RULES, messages: [{ role: "user", content: parts }], schema: { name: "gen_plan", schema: genPlanSchema } });
     const plan = JSON.parse(text) as GenPlan;
