@@ -7,8 +7,7 @@ import { toBlobURL } from "@ffmpeg/util";
 import wasmAsset from "@/assets/ffmpeg-core.wasm.asset.json";
 
 const CORE_URL = "/ffmpeg/ffmpeg-core.js";
-const XFADE = 0.5; // video crossfade seconds between shots
-const AFADE = 0.3; // audio crossfade seconds
+const XFADE = 0.5; // crossfade seconds between shots (video and audio use the same overlap so they stay in sync)
 
 let ffmpeg: FFmpeg | null = null;
 let loading: Promise<FFmpeg> | null = null;
@@ -19,6 +18,7 @@ async function getFfmpeg(onProgress?: (msg: string) => void) {
     loading = (async () => {
       onProgress?.("جارٍ تحميل أداة الدمج (أول مرة فقط)…");
       const f = new FFmpeg();
+      f.on("log", ({ message }) => console.log("[ffmpeg]", message));
       // Blob URLs bypass the dev server's module interception of /public files.
       const coreURL = await toBlobURL(CORE_URL, "text/javascript");
       const wasmURL = await toBlobURL(wasmAsset.url, "application/wasm");
@@ -49,19 +49,20 @@ export async function mergeScenes(
   const withAudio = scenes.every((s) => s.audioUrl);
 
   onProgress?.("جارٍ تجهيز اللقطات…");
-  const args: string[] = [];
   const cleanup: string[] = [];
   for (let i = 0; i < n; i++) {
     const scene = scenes[i]!;
     await f.writeFile(`v${i}.mp4`, await fetchBytes(scene.videoUrl));
-    args.push("-i", `v${i}.mp4`);
     cleanup.push(`v${i}.mp4`);
     if (withAudio) {
       await f.writeFile(`a${i}.wav`, await fetchBytes(scene.audioUrl!));
-      args.push("-i", `a${i}.wav`);
       cleanup.push(`a${i}.wav`);
     }
   }
+  // Inputs grouped: videos 0..n-1, then audios n..2n-1 (filtergraph below relies on this order).
+  const args: string[] = [];
+  for (let i = 0; i < n; i++) args.push("-i", `v${i}.mp4`);
+  if (withAudio) for (let i = 0; i < n; i++) args.push("-i", `a${i}.wav`);
 
   // Video: chained xfade. Offset of join k = sum(durations of shots before k) - k * XFADE.
   let vchain: string;
@@ -81,21 +82,25 @@ export async function mergeScenes(
     vchain = parts.join(";");
   }
 
-  // Audio: chained acrossfade so the voiceover flows without clicks or sudden silence.
+  // Audio: trim each voiceover to its shot's duration (TTS runs long and would drift out of
+  // sync), then chain acrossfades with the same overlap as the video so both end together.
   let achain = "";
   if (withAudio) {
+    const parts: string[] = [];
+    for (let i = 0; i < n; i++) {
+      parts.push(`[${n + i}:a]atrim=0:${scenes[i]!.duration.toFixed(2)},asetpts=PTS-STARTPTS[at${i}]`);
+    }
     if (n === 1) {
-      achain = `[${n}:a]anull[aout]`;
+      parts.push("[at0]anull[aout]");
     } else {
-      const parts: string[] = [];
-      let prev = `[${n}:a]`;
+      let prev = "[at0]";
       for (let i = 1; i < n; i++) {
         const out = i === n - 1 ? "[aout]" : `[ax${i}]`;
-        parts.push(`${prev}[${n + i}:a]acrossfade=d=${AFADE}${out}`);
+        parts.push(`${prev}[at${i}]acrossfade=d=${XFADE}${out}`);
         prev = out;
       }
-      achain = parts.join(";");
     }
+    achain = parts.join(";");
   }
 
   onProgress?.("جارٍ تركيب الفيديو النهائي بالانتقالات…");
@@ -103,7 +108,7 @@ export async function mergeScenes(
   const mapArgs = withAudio ? ["-map", "[vout]", "-map", "[aout]"] : ["-map", "[vout]"];
   const ok = await f.exec(
     [...args, "-filter_complex", fc, ...mapArgs, "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", "final.mp4"],
-    300000,
+    600000,
   );
   if (ok !== 0) throw new Error("فشل تركيب الفيديو النهائي.");
 
