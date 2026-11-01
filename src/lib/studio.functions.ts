@@ -203,9 +203,10 @@ async function makeVoice(supabase: any, userId: string, p: { projectId: string; 
     if (up.error) throw new Error("تعذر حفظ الصوت.");
     const { data: asset } = await supabase
       .from("assets")
-      .insert({ user_id: userId, project_id: p.projectId, kind: "audio", source: "generated", storage_path: path, mime: "audio/wav", size: wav.byteLength, meta: { voice: p.voice, dialect: p.dialect, delivery: p.delivery, text: p.text.slice(0, 500), ...(p.sceneIndex !== undefined ? { sceneIndex: p.sceneIndex } : {}) } })
+      .insert({ user_id: userId, project_id: p.projectId, kind: "audio", source: "generated", storage_path: path, mime: "audio/wav", size: wav.byteLength, meta: { voice: p.voice, dialect: p.dialect, delivery: p.delivery, pace: p.pace, text: p.text, ...(p.sceneIndex !== undefined ? { sceneIndex: p.sceneIndex } : {}) } })
       .select()
       .single();
+    if (!asset || !job) throw new Error("تعذر حفظ بيانات الصوت.");
     await supabase.from("generation_jobs").update({ status: "completed", output_asset_id: asset.id, updated_at: new Date().toISOString() }).eq("id", job.id);
     await logUsage(supabase, userId, { job_id: job.id, service: "voice", model: MODELS.speech, units: p.text.length, unit: "char" });
     return asset;
@@ -409,6 +410,12 @@ export const planGenerator = createServerFn({ method: "POST" })
     z.object({
       projectId: z.string().uuid(),
       description: z.string().min(10).max(6000),
+      voice: z.string().default("Orus"),
+      dialect: z.string().default("saudi"),
+      delivery: z.string().default("ad"),
+      pace: z.enum(["slow", "normal", "fast"]).default("normal"),
+      aspect: z.enum(["16:9", "9:16"]).default("9:16"),
+      resolution: z.enum(["720p", "1080p"]).default("720p"),
       duration: z.union([z.literal(10), z.literal(20), z.literal(30)]),
       assetIds: z.array(z.string().uuid()).max(4).default([]),
     }),
@@ -444,7 +451,7 @@ export const planGenerator = createServerFn({ method: "POST" })
     const { data: proj } = await supabase.from("projects").select("data").eq("id", data.projectId).single();
     await supabase
       .from("projects")
-      .update({ data: { ...((proj?.data as object) ?? {}), genPlan: plan, genSettings: { duration: data.duration } }, updated_at: new Date().toISOString() })
+      .update({ data: { ...((proj?.data as object) ?? {}), genPlan: plan, genSettings: { duration: data.duration, voice: data.voice, dialect: data.dialect, delivery: data.delivery, pace: data.pace, aspect: data.aspect, resolution: data.resolution } }, updated_at: new Date().toISOString() })
       .eq("id", data.projectId);
     await logUsage(supabase, userId, { service: "planning", model: MODELS.text, units: 1, unit: "request" });
     return plan;

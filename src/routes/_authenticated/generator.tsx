@@ -1,3 +1,5 @@
+import { useServerFn } from "@tanstack/react-start";
+import { captionCues, sceneReady } from "@/lib/narration-timeline";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Clapperboard, Download, ImagePlus, Loader2, Pause, Play, RefreshCw, Sparkles, Wand2 } from "lucide-react";
@@ -17,6 +19,8 @@ export const Route = createFileRoute("/_authenticated/generator")({
       { name: "description", content: "حوّل وصفًا مكتوبًا إلى فيديو متكامل بالتعليق الصوتي العربي." },
       { property: "og:title", content: "مولّد الفيديو والصوت — iM STUDIO" },
       { property: "og:description", content: "حوّل وصفًا مكتوبًا إلى فيديو متكامل بالتعليق الصوتي العربي." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: GeneratorPage,
@@ -29,6 +33,10 @@ type SceneState = {
   videoAssetId?: string | undefined;
   audioAssetId?: string | undefined;
   error?: string | undefined;
+  voice?: string;
+  dialect?: string;
+  delivery?: string;
+  pace?: string;
 };
 
 type RefImage = { id: string; url: string; path: string; mime: string };
@@ -47,6 +55,11 @@ const STATUS_LABEL: Record<SceneState["status"], string> = {
 };
 
 function GeneratorPage() {
+  const planFn = useServerFn(planGenerator);
+  const startFn = useServerFn(startSceneVideo);
+  const voiceFn = useServerFn(generateSceneVoice);
+  const pollFn = useServerFn(pollJob);
+  const runningFn = useServerFn(findRunningSceneJob);
   const { project: resumeId } = Route.useSearch();
   const navigate = useNavigate();
   const [step, setStep] = useState<"describe" | "plan" | "generating" | "done">("describe");
@@ -72,8 +85,14 @@ function GeneratorPage() {
       const { data: p } = await supabase.from("projects").select("*").eq("id", id).single();
       if (!p) return;
       const gp = (p.data as any)?.genPlan as GenPlan | undefined;
-      const gs = (p.data as any)?.genSettings as { duration?: number } | undefined;
+      const gs = (p.data as any)?.genSettings as { duration?: number; voice?: string; dialect?: string; delivery?: string; pace?: "slow" | "normal" | "fast"; aspect?: "16:9" | "9:16"; resolution?: "720p" | "1080p" } | undefined;
       if (gs?.duration) setDuration(gs.duration as 10 | 20 | 30);
+      if (gs?.voice) setVoice(gs.voice);
+      if (gs?.dialect) setDialect(gs.dialect);
+      if (gs?.delivery) setDelivery(gs.delivery);
+      if (gs?.pace) setPace(gs.pace);
+      if (gs?.aspect) setAspect(gs.aspect);
+      if (gs?.resolution) setResolution(gs.resolution);
       const { data: assets } = await supabase
         .from("assets")
         .select("id,kind,mime,storage_path,meta")
@@ -88,7 +107,7 @@ function GeneratorPage() {
         if (idx === undefined || idx === null) continue;
         const cur = byScene.get(idx) ?? { status: "pending" as const };
         if (a.kind === "video" && !cur.videoUrl) Object.assign(cur, { videoUrl: url, videoAssetId: a.id });
-        if (a.kind === "audio" && !cur.audioUrl) Object.assign(cur, { audioUrl: url, audioAssetId: a.id });
+        if (a.kind === "audio" && !cur.audioUrl) Object.assign(cur, { audioUrl: url, audioAssetId: a.id, voice: (a.meta as any)?.voice, dialect: (a.meta as any)?.dialect, delivery: (a.meta as any)?.delivery, pace: (a.meta as any)?.pace });
         byScene.set(idx, cur);
       }
       setRefImages(refs);
@@ -96,7 +115,7 @@ function GeneratorPage() {
         setPlan(gp);
         const states = gp.scenes.map((_, i) => {
           const s = byScene.get(i);
-          if (s?.videoUrl) return { ...s, status: "ready" as const };
+          if (s) return { ...s, status: sceneReady(s) ? "ready" as const : "pending" as const };
           return { status: "pending" as const };
         });
         setScenes(states);
@@ -107,6 +126,7 @@ function GeneratorPage() {
   );
 
   useEffect(() => {
+    stopRef.current = false;
     if (resumeId) resume(resumeId);
     return () => {
       stopRef.current = true;
@@ -129,7 +149,8 @@ function GeneratorPage() {
           .insert({ project_id: projectId, kind: "image", source: "uploaded", storage_path: path, mime: f.type, size: f.size })
           .select()
           .single();
-        setRefImages((r) => [...r, { id: asset!.id, url: URL.createObjectURL(f), path, mime: f.type }]);
+        if (!asset) throw new Error("تعذر حفظ الصورة");
+        setRefImages((r) => [...r, { id: asset.id, url: URL.createObjectURL(f), path, mime: f.type }]);
       }
       toast.success("تم رفع الصور المرجعية");
     } catch (e: any) {
@@ -154,7 +175,7 @@ function GeneratorPage() {
         setProjectId(pid);
         navigate({ to: "/generator", search: { project: pid }, replace: true });
       }
-      const p = await planGenerator({ data: { projectId: pid, description, duration, assetIds: refImages.map((r) => r.id) } });
+      const p = await planFn({ data: { projectId: pid, description, duration, assetIds: refImages.map((r) => r.id), voice, dialect, delivery, pace, aspect, resolution } });
       setPlan(p);
       setScenes(p.scenes.map(() => ({ status: "pending" })));
       setStep("plan");
@@ -170,62 +191,54 @@ function GeneratorPage() {
     setScenes((s) => s.map((x, j) => (j === i ? { ...x, ...patch } : x)));
   }
 
-  async function renderScene(i: number): Promise<boolean> {
-    if (!plan || !projectId) return false;
-    setScene(i, { status: "rendering", error: undefined });
-    try {
-      const scene = plan.scenes[i]!;
-      // Re-attach to a still-running job for this shot (e.g. after leaving the page) instead of duplicating it.
-      const existing = await findRunningSceneJob({ data: { projectId, sceneIndex: i } });
-      let jobId = existing.jobId;
-      if (!jobId) {
-        const started = await startSceneVideo({
-          data: {
-            projectId,
-            sceneIndex: i,
-            prompt: scene.video_prompt,
-            assetIds: refImages.map((r) => r.id).slice(0, 3),
-            duration: scene.duration,
-            aspect,
-            resolution,
-          },
-        });
-        jobId = started.jobId;
-      }
-      // Poll until this scene's video is stored.
-      for (;;) {
-        if (stopRef.current) return false;
-        await new Promise((r) => setTimeout(r, 5000));
-        const r = await pollJob({ data: { jobId } });
-        if (r.status === "completed") break;
-        if (r.status === "failed") throw new Error((r as any).error || "فشل توليد اللقطة");
-      }
-      const { data: va } = await supabase
-        .from("assets")
-        .select("id,storage_path")
-        .eq("project_id", projectId)
-        .eq("kind", "video")
-        .eq("meta->>sceneIndex", String(i))
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .single();
-      const videoUrl = va ? await sign(va.storage_path) : undefined;
-      setScene(i, { status: "voicing", videoUrl, videoAssetId: va?.id });
+  async function saveSettings() {
+    if (!projectId) return;
+    const { data: project, error } = await supabase.from("projects").select("data").eq("id", projectId).single();
+    if (error) throw error;
+    const { error: updateError } = await supabase.from("projects").update({ data: { ...((project?.data as object) ?? {}), genSettings: { duration, voice, dialect, delivery, pace, aspect, resolution } } }).eq("id", projectId);
+    if (updateError) throw updateError;
+  }
 
-      await generateSceneVoice({
-        data: { projectId, sceneIndex: i, text: scene.voiceover, voice, dialect, delivery, pace },
-      });
-      const { data: aa } = await supabase
-        .from("assets")
-        .select("id,storage_path")
-        .eq("project_id", projectId)
-        .eq("kind", "audio")
-        .eq("meta->>sceneIndex", String(i))
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .single();
-      const audioUrl = aa ? await sign(aa.storage_path) : undefined;
-      setScene(i, { status: "ready", audioUrl, audioAssetId: aa?.id });
+  async function renderScene(i: number, voiceOnly = false): Promise<boolean> {
+    const scene = plan?.scenes[i];
+    if (!scene || !projectId) return false;
+    const current = scenes[i];
+    setScene(i, { status: current?.videoUrl ? "voicing" : "rendering", error: undefined });
+    // Begin speech while the single-video queue renders, instead of waiting twice.
+    const narration = (async () => {
+      const matches = current?.audioUrl && current.voice === voice && current.dialect === dialect && current.delivery === delivery && current.pace === pace;
+      if (matches && !voiceOnly) return current;
+      const result = await voiceFn({ data: { projectId, sceneIndex: i, text: scene.voiceover, voice, dialect, delivery, pace } });
+      const { data: asset, error } = await supabase.from("assets").select("storage_path").eq("id", result.assetId).single();
+      if (error || !asset) throw new Error("تعذر تحميل التعليق الصوتي.");
+      const audioUrl = await sign(asset.storage_path);
+      if (!audioUrl) throw new Error("تعذر تشغيل التعليق الصوتي.");
+      const patch = { audioUrl, audioAssetId: result.assetId, voice, dialect, delivery, pace };
+      setScene(i, patch);
+      return patch;
+    })();
+    // Observe rejection immediately, while video is still rendering.
+    const audioResult = narration.then((data) => ({ data, error: null }), (error: Error) => ({ data: null, error }));
+    try {
+      let videoUrl = current?.videoUrl;
+      if (!videoUrl) {
+        const existing = await runningFn({ data: { projectId, sceneIndex: i } });
+        const jobId = existing.jobId ?? (await startFn({ data: { projectId, sceneIndex: i, prompt: scene.video_prompt, assetIds: refImages.map((r) => r.id).slice(0, 3), duration: scene.duration, aspect, resolution } })).jobId;
+        for (;;) {
+          if (stopRef.current) return false;
+          await new Promise((resolve) => setTimeout(resolve, 5000));
+          const result = await pollFn({ data: { jobId } });
+          if (result.status === "completed") break;
+          if (result.status === "failed") throw new Error(result.error || "فشل توليد اللقطة");
+        }
+        const { data: asset } = await supabase.from("assets").select("id,storage_path").eq("project_id", projectId).eq("kind", "video").eq("meta->>sceneIndex", String(i)).order("created_at", { ascending: false }).limit(1).single();
+        videoUrl = asset ? await sign(asset.storage_path) : undefined;
+        if (!videoUrl) throw new Error("تعذر تحميل الفيديو.");
+        setScene(i, { videoUrl, videoAssetId: asset?.id, status: "voicing" });
+      }
+      const audio = await audioResult;
+      if (audio.error) throw audio.error;
+      setScene(i, { ...audio.data, videoUrl, status: "ready" });
       return true;
     } catch (e: any) {
       setScene(i, { status: "failed", error: e.message || "فشل التوليد" });
@@ -234,57 +247,54 @@ function GeneratorPage() {
   }
 
   async function generateAll() {
-    if (!plan) return;
+    if (!plan || busy) return;
+    setBusy(true);
     setStep("generating");
     stopRef.current = false;
-    // Sequential rendering: the video provider queues per workspace; one at a time avoids rate limits.
-    for (let i = 0; i < plan.scenes.length; i++) {
-      if (stopRef.current) return;
-      if (scenes[i]?.status === "ready") continue;
-      await renderScene(i);
-    }
-    setStep("done");
-    toast.success("اكتمل توليد جميع اللقطات");
+    try {
+      await saveSettings();
+      let complete = true;
+      for (let i = 0; i < plan.scenes.length; i++) {
+        if (stopRef.current) return;
+        if (scenes[i]?.status === "ready" && scenes[i]?.voice === voice && scenes[i]?.dialect === dialect && scenes[i]?.delivery === delivery && scenes[i]?.pace === pace) continue;
+        if (!await renderScene(i)) { complete = false; break; }
+      }
+      setStep("done");
+      if (complete) toast.success("اكتمل الفيديو والتعليق الصوتي");
+      else toast.error("لم يكتمل التوليد؛ راجع اللقطة المتعثرة");
+    } catch (e: any) {
+      setStep("plan");
+      toast.error(e.message);
+    } finally { setBusy(false); }
   }
 
-  async function retryScene(i: number) {
+  async function retryScene(i: number, voiceOnly = false) {
+    if (busy) return;
     setBusy(true);
-    await renderScene(i);
-    setBusy(false);
-    setScenes((s) => {
-      if (s.every((x) => x.status === "ready")) setStep("done");
-      return s;
-    });
+    try { await saveSettings(); await renderScene(i, voiceOnly); }
+    catch (e: any) { toast.error(e.message); }
+    finally { setBusy(false); }
   }
 
   async function downloadMerged() {
-    const ready = scenes.filter((s) => s.status === "ready" && s.videoUrl);
-    if (ready.length !== scenes.length || !ready.length) {
-      toast.error("يجب اكتمال جميع اللقطات قبل الدمج");
-      return;
-    }
+    if (!allReady || !plan) { toast.error("أكمل الفيديو والصوت لكل اللقطات أولًا"); return; }
     setMerging("جارٍ التحضير…");
     try {
       const { mergeScenes } = await import("@/lib/merge-scenes");
-      const blob = await mergeScenes(
-        ready.map((s, idx) => ({ videoUrl: s.videoUrl!, audioUrl: s.audioUrl, duration: plan?.scenes[idx]?.duration ?? 3 })),
-        (msg) => setMerging(msg),
-      );
+      const inputs = scenes.flatMap((s, i) => s.videoUrl ? [{ videoUrl: s.videoUrl, audioUrl: s.audioUrl, duration: plan.scenes[i]?.duration ?? 3, voiceover: plan.scenes[i]?.voiceover ?? "" }] : []);
+      const blob = await mergeScenes(inputs, setMerging);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
       a.download = `im-studio-${Date.now()}.mp4`;
       a.click();
-      URL.revokeObjectURL(url);
-      toast.success("تم تنزيل الفيديو النهائي");
-    } catch (e: any) {
-      toast.error(e.message || "تعذر الدمج في المتصفح — نزّل اللقطات منفصلة من الأسفل");
-    } finally {
-      setMerging(null);
-    }
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      toast.success("تم تنزيل الفيديو بالصوت والكتابة");
+    } catch (e: any) { toast.error(e.message || "تعذر حفظ الفيديو"); }
+    finally { setMerging(null); }
   }
 
-  const allReady = scenes.length > 0 && scenes.every((s) => s.status === "ready");
+  const allReady = scenes.length > 0 && scenes.every((s) => s.status === "ready" && sceneReady(s));
   const selectCls = "h-11 w-full rounded-xl border border-border bg-background px-3 text-sm";
 
   return (
@@ -438,7 +448,7 @@ function GeneratorPage() {
           )}
           {step === "generating" && (
             <p className="text-center text-sm text-muted-foreground">
-              جارٍ التوليد… تُولَّد اللقطات بالتتابع وقد يستغرق كل لقطة بضع دقائق. يمكنك مغادرة الصفحة والعودة لاحقًا.
+              جارٍ توليد الفيديو والتعليق الصوتي…
             </p>
           )}
         </section>
@@ -448,10 +458,10 @@ function GeneratorPage() {
       {scenes.some((s) => s.videoUrl) && (
         <section className="glass animate-fade space-y-4 rounded-2xl p-5">
           <h2 className="font-bold">المعاينة والتنزيل</h2>
-          <ScenePlayer scenes={scenes} aspect={aspect} />
+          <ScenePlayer scenes={scenes} aspect={aspect} plan={plan} />
           <div className="flex flex-col gap-2 sm:flex-row">
             <Button variant="luxe" onClick={downloadMerged} disabled={!allReady || merging !== null} className="h-11 flex-1">
-              {merging ? <Loader2 className="animate-spin" /> : <Download />} {merging ?? "تنزيل الفيديو النهائي (مدمج بالصوت)"}
+              {merging ? <Loader2 className="animate-spin" /> : <Download />} {merging ?? "تنزيل الفيديو بالصوت والكتابة"}
             </Button>
           </div>
           {!allReady && <p className="text-xs text-muted-foreground">زر الدمج يُفعَّل بعد اكتمال جميع اللقطات. يمكنك تنزيل أي لقطة جاهز منفردًا:</p>}
@@ -459,9 +469,11 @@ function GeneratorPage() {
             {scenes.map(
               (s, i) =>
                 s.videoUrl && (
-                  <a key={i} href={s.videoUrl} download className="text-sm text-gold hover:underline">
-                    تنزيل لقطة {i + 1}
-                  </a>
+                  <div key={i} className="flex flex-wrap items-center gap-2">
+                    <a href={s.videoUrl} download className="text-sm text-gold hover:underline">لقطة {i + 1} (دون التعليق)</a>
+                    {s.audioUrl && <a href={s.audioUrl} download className="text-sm text-gold hover:underline">التعليق الصوتي {i + 1}</a>}
+                    <Button size="sm" variant="outline" disabled={busy || merging !== null} onClick={() => retryScene(i, true)}><RefreshCw className="h-3 w-3" /> {s.audioUrl ? "تحديث الصوت المختار" : "إنشاء الصوت المختار"}</Button>
+                  </div>
                 ),
             )}
           </div>
@@ -471,75 +483,63 @@ function GeneratorPage() {
   );
 }
 
-/** Sequential player: plays each scene's video with its voiceover in sync, auto-advancing. */
-function ScenePlayer({ scenes, aspect }: { scenes: SceneState[]; aspect: "16:9" | "9:16" }) {
+/** Preview uses narration as the clock so short source clips cannot cut off speech. */
+function ScenePlayer({ scenes, aspect, plan }: { scenes: SceneState[]; aspect: "16:9" | "9:16"; plan: GenPlan | null }) {
   const [idx, setIdx] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [time, setTime] = useState(0);
+  const [audioDuration, setAudioDuration] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const ready = scenes.map((s, i) => ({ ...s, i })).filter((s) => s.videoUrl);
   const cur = ready[Math.min(idx, ready.length - 1)];
+  const videoUrl = cur?.videoUrl;
+  const audioUrl = cur?.audioUrl;
 
-  useEffect(() => {
+  async function playMedia() {
     const v = videoRef.current;
     const a = audioRef.current;
-    if (!v) return;
-    if (playing) {
-      v.play().catch(() => setPlaying(false));
-      a?.play().catch(() => {});
-    } else {
-      v.pause();
-      a?.pause();
-    }
-  }, [playing, idx]);
+    if (!v || !a || !audioUrl) { toast.error("التعليق الصوتي لم يكتمل بعد"); setPlaying(false); return; }
+    try { await Promise.all([v.play(), a.play()]); }
+    catch { v.pause(); a.pause(); setPlaying(false); toast.error("اضغط تشغيل للسماح بالصوت، أو أعد تحميل التعليق"); }
+  }
+
+  useEffect(() => {
+    setTime(0);
+    setAudioDuration(0);
+    if (playing) void playMedia();
+  }, [videoUrl, audioUrl]);
+
+  useEffect(() => () => { videoRef.current?.pause(); audioRef.current?.pause(); }, []);
+
+  function toggle() {
+    if (playing) { videoRef.current?.pause(); audioRef.current?.pause(); setPlaying(false); }
+    else { setPlaying(true); void playMedia(); }
+  }
 
   if (!cur) return null;
-
-  function onEnded() {
-    if (idx < ready.length - 1) {
-      setIdx(idx + 1);
-    } else {
-      setPlaying(false);
-      setIdx(0);
-    }
+  const cues = captionCues(plan?.scenes[cur.i]?.voiceover ?? "", 0, audioDuration);
+  const caption = playing ? cues.find((c) => time >= c.start && time < c.end)?.text : undefined;
+  function advance() {
+    const v = videoRef.current;
+    const a = audioRef.current;
+    if (!v?.ended || !a?.ended) return;
+    if (idx < ready.length - 1) setIdx(idx + 1);
+    else { setPlaying(false); setIdx(0); if (v) v.currentTime = 0; if (a) a.currentTime = 0; }
   }
 
   return (
     <div className="space-y-3">
-      <div className={`relative mx-auto overflow-hidden rounded-2xl border border-border bg-black ${aspect === "9:16" ? "aspect-[9/16] max-h-[65vh]" : "aspect-video w-full"}`}>
-        <video
-          key={cur.videoUrl}
-          ref={videoRef}
-          src={cur.videoUrl}
-          className="h-full w-full object-contain"
-          playsInline
-          onEnded={onEnded}
-        />
-        {cur.audioUrl && <audio key={cur.audioUrl} ref={audioRef} src={cur.audioUrl} />}
-        <button
-          onClick={() => setPlaying((p) => !p)}
-          className="glass absolute bottom-3 right-3 grid h-11 w-11 place-items-center rounded-full text-foreground"
-          aria-label={playing ? "إيقاف" : "تشغيل"}
-        >
-          {playing ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
-        </button>
+      <div className={`relative mx-auto overflow-hidden rounded-2xl border border-border bg-background ${aspect === "9:16" ? "aspect-[9/16] max-h-[65vh]" : "aspect-video w-full"}`}>
+        <video key={videoUrl} ref={videoRef} src={videoUrl} muted className="h-full w-full object-contain" playsInline preload="auto" onEnded={advance} onWaiting={() => audioRef.current?.pause()} onPlaying={() => { if (playing && audioRef.current?.paused) void audioRef.current.play().catch(() => setPlaying(false)); }} />
+        {audioUrl && <audio key={audioUrl} ref={audioRef} src={audioUrl} preload="auto" onLoadedMetadata={(e) => setAudioDuration(e.currentTarget.duration)} onTimeUpdate={(e) => { setTime(e.currentTarget.currentTime); const v = videoRef.current; if (v && !v.ended && Math.abs(v.currentTime - e.currentTarget.currentTime) > 0.25) v.currentTime = Math.min(e.currentTarget.currentTime, v.duration || 0); }} onEnded={advance} onError={() => { setPlaying(false); toast.error("تعذر تحميل التعليق الصوتي؛ أعد إنشاءه"); }} />}
+        {caption && <div dir="rtl" data-testid="video-caption" className="video-caption absolute bottom-[16%] left-[6%] right-[6%] rounded-md px-3 py-2 text-lg">{caption}</div>}
+        <Button variant="outline" size="icon" disabled={!audioUrl} onClick={toggle} className="absolute bottom-3 right-3 h-11 w-11 rounded-full" aria-label={playing ? "إيقاف" : "تشغيل بالصوت"}>{playing ? <Pause /> : <Play />}</Button>
       </div>
-      <div className="flex items-center justify-center gap-2">
-        {ready.map((s, j) => (
-          <button
-            key={s.i}
-            onClick={() => {
-              setIdx(j);
-              setPlaying(true);
-            }}
-            className={`h-2 rounded-full transition-all ${j === idx ? "w-6 bg-gold" : "w-2 bg-border"}`}
-            aria-label={`لقطة ${s.i + 1}`}
-          />
-        ))}
+      <div className="flex flex-wrap items-center justify-center gap-2">
+        {ready.map((s, j) => <Button key={s.i} variant={j === idx ? "default" : "outline"} size="sm" aria-label={`لقطة ${s.i + 1}`} onClick={() => { videoRef.current?.pause(); audioRef.current?.pause(); setPlaying(false); setIdx(j); }}>{s.i + 1}</Button>)}
       </div>
-      <p className="text-center text-xs text-muted-foreground">
-        لقطة {cur.i + 1} من {ready.length} {cur.audioUrl ? "· بتعليق صوتي" : "· بدون صوت بعد"}
-      </p>
+      <p className="text-center text-xs text-muted-foreground">لقطة {cur.i + 1} من {ready.length} {audioUrl ? `· ${VOICES.find((v) => v.id === cur.voice)?.label ?? "تعليق عربي"}` : "· التعليق الصوتي غير مكتمل"}</p>
     </div>
   );
 }
