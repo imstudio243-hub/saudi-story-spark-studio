@@ -62,9 +62,10 @@ function ProjectPage() {
     setBusy("upload");
     try {
       const { data: u } = await supabase.auth.getUser();
+      if (!u.user) throw new Error("الجلسة غير صالحة");
       for (const f of Array.from(files).slice(0, 4)) {
         const ext = f.name.split(".").pop() || "png";
-        const path = `${u!.user.id}/${id}/${crypto.randomUUID()}.${ext}`;
+        const path = `${u.user.id}/${id}/${crypto.randomUUID()}.${ext}`;
         const { error } = await supabase.storage.from("studio").upload(path, f, { contentType: f.type });
         if (error) throw error;
         await supabase.from("assets").insert({ project_id: id, kind: "image", source: "uploaded", storage_path: path, mime: f.type, size: f.size });

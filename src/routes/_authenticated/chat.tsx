@@ -34,7 +34,7 @@ function ChatPage() {
     const r = new FileReader();
     r.onload = () => {
       const res = r.result as string;
-      setImage({ data: res.split(",")[1], mime: f.type as any, preview: res });
+      setImage({ data: res.split(",")[1] ?? "", mime: f.type as any, preview: res });
     };
     r.readAsDataURL(f);
   }
