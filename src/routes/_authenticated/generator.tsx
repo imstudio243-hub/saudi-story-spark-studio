@@ -398,13 +398,29 @@ function GeneratorPage() {
       {/* Step 1: description & settings */}
       <section className="glass space-y-4 rounded-2xl p-5">
         <h2 className="flex items-center gap-2 font-bold"><Wand2 className="h-5 w-5 text-gold" /> وصف الفيديو</h2>
-        <Textarea
-          placeholder="مثال: أنشئ فيديو شرح لتطبيق برق للتمويل مدته 30 ثانية، يظهر فيه هاتف ذكي فقط دون ظهور أشخاص، مع تعليق صوتي رجالي باللهجة السعودية يشرح خطوات استخدام التطبيق…"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          rows={4}
-          disabled={step === "generating"}
-        />
+        <div className="relative">
+          <Textarea
+            placeholder="مثال: أنشئ فيديو شرح لتطبيق برق للتمويل مدته 30 ثانية، يظهر فيه هاتف ذكي فقط دون ظهور أشخاص، مع تعليق صوتي رجالي باللهجة السعودية يشرح خطوات استخدام التطبيق…"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={4}
+            disabled={step === "generating"}
+            className="pb-12"
+          />
+          <label className="absolute bottom-2.5 left-2.5 cursor-pointer" title="أرفق صورة منتج أو فيديو مرجعيًا ليقلّد الذكاء أسلوبه">
+            <input type="file" accept="image/*,video/*" className="hidden" disabled={analyzing || step === "generating"} onChange={(e) => { void uploadReference(e.target.files); e.target.value = ""; }} />
+            <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground transition-colors hover:border-gold hover:text-gold">
+              {analyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+            </span>
+          </label>
+        </div>
+        {analyzing && <p className="text-xs text-muted-foreground">جارٍ استخراج لقطات الفيديو وفهم أسلوبه (الشخصيات، الألوان، التنقلات، الكلام)…</p>}
+        {styleBrief && !analyzing && (
+          <div className="flex items-start gap-2 rounded-xl border border-gold/30 bg-gold/5 p-3 text-xs">
+            <Film className="mt-0.5 h-4 w-4 shrink-0 text-gold" />
+            <p className="text-muted-foreground"><span className="font-bold text-gold">تم فهم أسلوب الفيديو المرجعي</span> — سيُقلَّد في إعلانك: {styleBrief.slice(0, 180)}…</p>
+          </div>
+        )}
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="space-y-1.5">
             <Label>مدة الفيديو</Label>
