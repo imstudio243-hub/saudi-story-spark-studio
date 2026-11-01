@@ -11,7 +11,7 @@ import {
   synthesize,
   toBase64,
 } from "./ai.server";
-import { AD_STYLES, voiceInstruction, type AdPlan } from "./catalog";
+import { AD_STYLES, voiceInstruction, type AdPlan, type GenPlan } from "./catalog";
 
 const planSchema = {
   type: "object",
