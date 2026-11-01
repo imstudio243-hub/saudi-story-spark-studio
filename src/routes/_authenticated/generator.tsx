@@ -100,6 +100,12 @@ function GeneratorPage() {
         .order("created_at", { ascending: false });
       const refs: RefImage[] = [];
       const byScene = new Map<number, SceneState>();
+      const { data: jobs } = await supabase.from("generation_jobs").select("kind,status,error,input").eq("project_id", id).order("created_at", { ascending: false });
+      const latestVideo = new Map<number, { status: string; error: string | null }>();
+      for (const job of jobs ?? []) {
+        const index = (job.input as any)?.sceneIndex;
+        if (job.kind === "video" && typeof index === "number" && !latestVideo.has(index)) latestVideo.set(index, job);
+      }
       for (const a of assets ?? []) {
         const url = await sign(a.storage_path);
         if (a.kind === "image") refs.push({ id: a.id, url, path: a.storage_path, mime: a.mime });
@@ -116,6 +122,8 @@ function GeneratorPage() {
         const states = gp.scenes.map((_, i) => {
           const s = byScene.get(i);
           if (s) return { ...s, status: sceneReady(s) ? "ready" as const : "pending" as const };
+          const job = latestVideo.get(i);
+          if (job?.status === "failed") return { status: "failed" as const, error: job.error === "Internal error encountered." ? "تعطلت خدمة الفيديو أثناء إنشاء هذه اللقطة؛ أعد محاولة هذه اللقطة فقط." : job.error ?? "تعذر إنشاء اللقطة" };
           return { status: "pending" as const };
         });
         setScenes(states);
@@ -437,6 +445,7 @@ function GeneratorPage() {
                       </Button>
                     </div>
                   )}
+                  {st?.status === "pending" && step !== "generating" && <Button size="sm" variant="outline" disabled={busy} onClick={() => retryScene(i)}><Play className="h-3.5 w-3.5" /> إنشاء لقطة {i + 1}</Button>}
                 </div>
               );
             })}
@@ -543,7 +552,7 @@ function ScenePlayer({ scenes, aspect, plan }: { scenes: SceneState[]; aspect: "
       <div className="flex flex-wrap items-center justify-center gap-2">
         {ready.map((s, j) => <Button key={s.i} variant={j === idx ? "default" : "outline"} size="sm" aria-label={`لقطة ${s.i + 1}`} onClick={() => { videoRef.current?.pause(); audioRef.current?.pause(); setPlaying(false); setIdx(j); }}>{s.i + 1}</Button>)}
       </div>
-      <p className="text-center text-xs text-muted-foreground">لقطة {cur.i + 1} من {ready.length} {audioUrl ? `· ${VOICES.find((v) => v.id === cur.voice)?.label ?? "تعليق عربي"}` : "· التعليق الصوتي غير مكتمل"}</p>
+      <p className="text-center text-xs text-muted-foreground">لقطة {cur.i + 1} من {plan?.scenes.length ?? scenes.length} · الجاهز {ready.length} {audioUrl ? `· ${VOICES.find((v) => v.id === cur.voice)?.label ?? "تعليق عربي"}` : "· التعليق الصوتي غير مكتمل"}</p>
     </div>
   );
 }
