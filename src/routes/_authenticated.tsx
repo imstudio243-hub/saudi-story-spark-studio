@@ -1,6 +1,6 @@
 import { createFileRoute, Link, Outlet, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
-import { Bot, FolderKanban, LogOut, Mic2, Shield } from "lucide-react";
+import { Bot, Clapperboard, FolderKanban, LogOut, Mic2, Shield } from "lucide-react";
 import { useAuth, useIsAdmin } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Logo, ThemeToggle } from "@/components/Brand";
