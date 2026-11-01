@@ -24,7 +24,7 @@ function Dashboard() {
   const [projects, setProjects] = useState<any[] | null>(null);
   const [usage, setUsage] = useState<{ service: string; units: number; unit: string }[]>([]);
   const [name, setName] = useState("");
-  const [kind, setKind] = useState<"ad" | "explainer" | "voice">("ad");
+  const [kind, setKind] = useState<"ad" | "explainer" | "voice" | "generator">("ad");
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -34,6 +34,10 @@ function Dashboard() {
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
+    if (kind === "generator") {
+      navigate({ to: "/generator" });
+      return;
+    }
     const { data, error } = await supabase.from("projects").insert({ name: name.trim() || "مشروع بدون اسم", kind }).select().single();
     if (error) { toast.error("تعذر إنشاء المشروع"); return; }
     navigate({ to: "/projects/$id", params: { id: data.id } });
