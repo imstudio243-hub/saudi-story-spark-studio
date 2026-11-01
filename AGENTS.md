@@ -8,3 +8,7 @@
 > Commits you push to the connected branch sync back to Lovable and show up in
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
+
+- Keep narration readiness and estimated phrase timing in the browser-safe narration-timeline module; both preview and export use it to avoid silent completion and inconsistent captions.
+- Burn Arabic captions using browser-shaped canvas PNGs in the lazy FFmpeg export, because the bundled core does not guarantee Arabic text shaping or font filters.
+- Preserve selected voice settings in generator project data and overlap speech generation with the existing single-video queue, avoiding duplicate video requests.

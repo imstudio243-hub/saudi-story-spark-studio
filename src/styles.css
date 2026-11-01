@@ -59,6 +59,8 @@
 }
 
 :root {
+  --caption-background: rgba(0, 0, 0, 0.78);
+  --caption-foreground: #ffffff;
   --radius: 0.9rem;
   --background: oklch(0.13 0.012 300);
   --foreground: oklch(0.96 0.01 300);
@@ -127,6 +129,15 @@
   --sidebar-accent: oklch(0.93 0.03 310);
   --sidebar-accent-foreground: oklch(0.2 0.03 300);
   --sidebar-border: oklch(0.2 0.03 300 / 10%);
+}
+
+.video-caption {
+  color: var(--caption-foreground);
+  background: var(--caption-background);
+  text-align: center;
+  font-weight: 700;
+  line-height: 1.6;
+  letter-spacing: 0;
 }
 
 @layer base {
