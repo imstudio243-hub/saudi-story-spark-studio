@@ -500,8 +500,12 @@ function ScenePlayer({ scenes, aspect, plan }: { scenes: SceneState[]; aspect: "
     const v = videoRef.current;
     const a = audioRef.current;
     if (!v || !a || !audioUrl) { toast.error("التعليق الصوتي لم يكتمل بعد"); setPlaying(false); return; }
-    try { await Promise.all([v.play(), a.play()]); }
-    catch { v.pause(); a.pause(); setPlaying(false); toast.error("اضغط تشغيل للسماح بالصوت، أو أعد تحميل التعليق"); }
+    try {
+      // A source codec failure must not hide the separately generated Arabic narration.
+      const videoPlayback = v.play().catch(() => { toast.error("تعذر تشغيل صورة المقطع في هذا المتصفح؛ يمكنك سماع التعليق وتنزيل الفيديو النهائي."); });
+      await a.play();
+      await videoPlayback;
+    } catch { v.pause(); a.pause(); setPlaying(false); toast.error("اضغط تشغيل للسماح بالصوت، أو أعد تحميل التعليق"); }
   }
 
   useEffect(() => {
@@ -523,7 +527,7 @@ function ScenePlayer({ scenes, aspect, plan }: { scenes: SceneState[]; aspect: "
   function advance() {
     const v = videoRef.current;
     const a = audioRef.current;
-    if (!v?.ended || !a?.ended) return;
+    if ((!v?.ended && !v?.error) || !a?.ended) return;
     if (idx < ready.length - 1) setIdx(idx + 1);
     else { setPlaying(false); setIdx(0); if (v) v.currentTime = 0; if (a) a.currentTime = 0; }
   }
