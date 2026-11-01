@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { planGenerator, startSceneVideo, generateSceneVoice, pollJob, findRunningSceneJob } from "@/lib/studio.functions";
 import { ASPECTS, DELIVERY, DIALECTS, GEN_DURATIONS, RESOLUTIONS, VOICES, type GenPlan } from "@/lib/catalog";
+import { formatCredits, planTotalCredits, sceneTotalCredits } from "@/lib/gen-cost";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -327,7 +328,7 @@ function GeneratorPage() {
             <Label>مدة الفيديو</Label>
             <select value={duration} onChange={(e) => setDuration(Number(e.target.value) as 10 | 20 | 30)} className={selectCls} disabled={step === "generating"}>
               {GEN_DURATIONS.map((d) => (
-                <option key={d.id} value={d.id}>{d.label} · {d.minShots}–{d.maxShots} لقطات</option>
+                <option key={d.id} value={d.id}>{d.label} · {d.minShots}–{d.maxShots} لقطات · ~{formatCredits(planTotalCredits([{ duration: d.id }], "720p"))} رصيد</option>
               ))}
             </select>
           </div>
