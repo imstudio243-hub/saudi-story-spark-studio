@@ -1,35 +1,28 @@
 // Browser-only scene merger: joins shot MP4s with cinematic crossfades and voiceover WAVs
-// with acrossfades into one MP4, via ffmpeg.wasm (single-threaded core, no SharedArrayBuffer),
-// loaded lazily from CDN.
+// with acrossfades into one MP4, via ffmpeg.wasm 0.12 (single-threaded core served
+// same-origin, no SharedArrayBuffer needed). Loaded lazily on first export.
 
-const FFMPEG_URL = "https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js";
-const CORE_URL = "https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js";
+import { FFmpeg } from "@ffmpeg/ffmpeg";
+import { toBlobURL } from "@ffmpeg/util";
+import wasmAsset from "@/assets/ffmpeg-core.wasm.asset.json";
+
+const CORE_URL = "/ffmpeg/ffmpeg-core.js";
 const XFADE = 0.5; // video crossfade seconds between shots
 const AFADE = 0.3; // audio crossfade seconds
 
-let ffmpeg: any = null;
-let loading: Promise<any> | null = null;
-
-function loadScript(src: string) {
-  return new Promise<void>((resolve, reject) => {
-    if (document.querySelector(`script[src="${src}"]`)) return resolve();
-    const s = document.createElement("script");
-    s.src = src;
-    s.onload = () => resolve();
-    s.onerror = () => reject(new Error("تعذر تحميل مكتبة الدمج."));
-    document.head.appendChild(s);
-  });
-}
+let ffmpeg: FFmpeg | null = null;
+let loading: Promise<FFmpeg> | null = null;
 
 async function getFfmpeg(onProgress?: (msg: string) => void) {
   if (ffmpeg) return ffmpeg;
   if (!loading) {
     loading = (async () => {
       onProgress?.("جارٍ تحميل أداة الدمج (أول مرة فقط)…");
-      await loadScript(FFMPEG_URL);
-      const { createFFmpeg } = (window as any).FFmpeg;
-      const f = createFFmpeg({ log: false, corePath: CORE_URL });
-      await f.load();
+      const f = new FFmpeg();
+      // Blob URLs bypass the dev server's module interception of /public files.
+      const coreURL = await toBlobURL(CORE_URL, "text/javascript");
+      const wasmURL = await toBlobURL(wasmAsset.url, "application/wasm");
+      await f.load({ coreURL, wasmURL });
       ffmpeg = f;
       return f;
     })();
@@ -60,11 +53,11 @@ export async function mergeScenes(
   const cleanup: string[] = [];
   for (let i = 0; i < n; i++) {
     const scene = scenes[i]!;
-    f.FS("writeFile", `v${i}.mp4`, await fetchBytes(scene.videoUrl));
+    await f.writeFile(`v${i}.mp4`, await fetchBytes(scene.videoUrl));
     args.push("-i", `v${i}.mp4`);
     cleanup.push(`v${i}.mp4`);
     if (withAudio) {
-      f.FS("writeFile", `a${i}.wav`, await fetchBytes(scene.audioUrl!));
+      await f.writeFile(`a${i}.wav`, await fetchBytes(scene.audioUrl!));
       args.push("-i", `a${i}.wav`);
       cleanup.push(`a${i}.wav`);
     }
@@ -108,13 +101,18 @@ export async function mergeScenes(
   onProgress?.("جارٍ تركيب الفيديو النهائي بالانتقالات…");
   const fc = withAudio ? `${vchain};${achain}` : vchain;
   const mapArgs = withAudio ? ["-map", "[vout]", "-map", "[aout]"] : ["-map", "[vout]"];
-  await f.run(...args, "-filter_complex", fc, ...mapArgs, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", "final.mp4");
+  const ok = await f.exec(
+    [...args, "-filter_complex", fc, ...mapArgs, "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", "final.mp4"],
+    300000,
+  );
+  if (ok !== 0) throw new Error("فشل تركيب الفيديو النهائي.");
 
-  const data = f.FS("readFile", "final.mp4") as Uint8Array;
+  const data = (await f.readFile("final.mp4")) as Uint8Array;
   try {
-    for (const name of [...cleanup, "final.mp4"]) f.FS("unlink", name);
+    for (const name of [...cleanup, "final.mp4"]) await f.deleteFile(name);
   } catch {
     /* ignore */
   }
-  return new Blob([data.buffer as ArrayBuffer], { type: "video/mp4" });
+  const buf = new Uint8Array(data).buffer as ArrayBuffer;
+  return new Blob([buf], { type: "video/mp4" });
 }
