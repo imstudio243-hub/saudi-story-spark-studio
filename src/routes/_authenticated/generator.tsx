@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Clapperboard, Download, ImagePlus, Loader2, Pause, Play, RefreshCw, Sparkles, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { planGenerator, startSceneVideo, generateSceneVoice, pollJob } from "@/lib/studio.functions";
+import { planGenerator, startSceneVideo, generateSceneVoice, pollJob, findRunningSceneJob } from "@/lib/studio.functions";
 import { ASPECTS, DELIVERY, DIALECTS, GEN_DURATIONS, RESOLUTIONS, VOICES, type GenPlan } from "@/lib/catalog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";

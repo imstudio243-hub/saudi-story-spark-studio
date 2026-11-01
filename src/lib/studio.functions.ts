@@ -481,6 +481,24 @@ export const startSceneVideo = createServerFn({ method: "POST" })
     }
   });
 
+/** Find a still-running video job for a scene so a reopened page re-attaches instead of duplicating. */
+export const findRunningSceneJob = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(z.object({ projectId: z.string().uuid(), sceneIndex: z.number().int().min(0).max(14) }))
+  .handler(async ({ data, context }) => {
+    const { data: job } = await context.supabase
+      .from("generation_jobs")
+      .select("id")
+      .eq("project_id", data.projectId)
+      .eq("kind", "video")
+      .eq("status", "running")
+      .eq("input->>sceneIndex", String(data.sceneIndex))
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    return { jobId: (job?.id as string | undefined) ?? null };
+  });
+
 export const generateSceneVoice = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(voiceInput.extend({ sceneIndex: z.number().int().min(0).max(14) }))
