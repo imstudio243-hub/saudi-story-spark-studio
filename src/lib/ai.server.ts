@@ -175,6 +175,19 @@ export function isProviderInternalError(message: string | undefined) {
   return /internal error/i.test(message ?? "");
 }
 
+/**
+ * Last-resort rewrite when even the simplified prompt fails: keep only the
+ * character/setting anchor and one simple action, no effects or transitions.
+ */
+export async function minimalVideoPrompt(prompt: string) {
+  const text = await respond({
+    instructions:
+      "Reduce this failing text-to-video prompt to its safest possible form: keep the character or product description (face, hair, clothes, colors) and the setting, then describe ONE simple action and a static or slowly moving camera. Remove all effects, particles, lightning, transitions, text overlays, and references to other clips. Plain English, at most 45 words. Return only the prompt.",
+    messages: [{ role: "user", content: prompt }],
+  });
+  return text.trim().slice(0, 600);
+}
+
 // ---------- Speech ----------
 export async function synthesize(text: string, voice: string) {
   const res = await fetch(`${BASE}/audio/speech`, {

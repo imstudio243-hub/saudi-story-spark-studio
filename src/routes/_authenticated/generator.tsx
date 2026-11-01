@@ -115,7 +115,9 @@ function GeneratorPage() {
       }
       for (const a of assets ?? []) {
         const url = await sign(a.storage_path);
-        if (a.kind === "image") refs.push({ id: a.id, url, path: a.storage_path, mime: a.mime });
+        // Video-frame assets are style-analysis inputs, not subject references:
+        // sending them to the video model causes provider failures and wrong output.
+        if (a.kind === "image" && (a.meta as any)?.refRole !== "video-frame") refs.push({ id: a.id, url, path: a.storage_path, mime: a.mime });
         const idx = (a.meta as any)?.sceneIndex;
         if (idx === undefined || idx === null) continue;
         const cur = byScene.get(idx) ?? { status: "pending" as const };

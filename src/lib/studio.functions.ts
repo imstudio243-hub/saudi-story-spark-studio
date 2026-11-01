@@ -159,14 +159,24 @@ export const pollJob = createServerFn({ method: "POST" })
     if (v.status === "failed") {
       const msg = v.error?.message || "فشل توليد الفيديو.";
       const prev = job.input as any;
-      // One automatic recovery for text-only scenes: retry with a simplified prompt on the same job row.
-      if (isProviderInternalError(msg) && !prev?.simplified && !(prev?.assetIds?.length) && typeof prev?.prompt === "string") {
+      // Automatic recovery on the same job row: first a simplified prompt, then a
+      // minimal safe prompt. Reference images are kept in both retries.
+      if (isProviderInternalError(msg) && typeof prev?.prompt === "string" && !prev?.minimal) {
         try {
-          const prompt = await simplifyVideoPrompt(prev.prompt);
-          const retry = await createVideo({ prompt, images: [], duration: prev.duration, aspect: prev.aspect, resolution: prev.resolution });
+          const images = [];
+          if (Array.isArray(prev.assetIds) && prev.assetIds.length) {
+            const { data: assets } = await supabase
+              .from("assets")
+              .select("storage_path, mime")
+              .in("id", prev.assetIds);
+            for (const a of assets ?? []) images.push({ data: await readAsset(supabase, a.storage_path), mime: a.mime });
+          }
+          const secondAttempt = Boolean(prev.simplified);
+          const prompt = secondAttempt ? await minimalVideoPrompt(prev.prompt) : await simplifyVideoPrompt(prev.prompt);
+          const retry = await createVideo({ prompt, images, duration: prev.duration, aspect: prev.aspect, resolution: prev.resolution });
           await supabase
             .from("generation_jobs")
-            .update({ provider_job_id: retry.id, input: { ...prev, prompt, originalPrompt: prev.prompt, simplified: true }, error: null, updated_at: new Date().toISOString() })
+            .update({ provider_job_id: retry.id, input: { ...prev, prompt, originalPrompt: prev.originalPrompt ?? prev.prompt, simplified: true, ...(secondAttempt ? { minimal: true } : {}) }, error: null, updated_at: new Date().toISOString() })
             .eq("id", job.id);
           return { status: "running", progress: null, simplified: true };
         } catch {
