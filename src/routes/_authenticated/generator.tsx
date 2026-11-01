@@ -130,18 +130,42 @@ function GeneratorPage() {
         });
         setScenes(states);
         setStep(states.every((s) => s.status === "ready") && states.length > 0 ? "done" : "plan");
+        return states;
       }
+      return null;
     },
     [],
   );
 
+  // generateAll is assigned to a ref so the resume effect can auto-continue work.
+  const generateAllRef = useRef<((p?: GenPlan, states?: SceneState[]) => Promise<void>) | null>(null);
+
   useEffect(() => {
     stopRef.current = false;
-    if (resumeId) resume(resumeId);
+    if (resumeId) {
+      // Leaving the page never cancels provider-side jobs; on return, re-attach to
+      // running jobs and continue the remaining scenes automatically.
+      void resume(resumeId).then((states) => {
+        if (states?.some((s) => s.status !== "ready")) generateAllRef.current?.();
+      });
+    }
     return () => {
       stopRef.current = true;
     };
   }, [resumeId, resume]);
+
+  // If the user switches away mid-generation and comes back, restart the polling loop.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && projectId && !busy) {
+        void resume(projectId).then((states) => {
+          if (states?.some((s) => s.status !== "ready")) generateAllRef.current?.();
+        });
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [projectId, busy, resume]);
 
   async function uploadRefs(files: FileList | null) {
     if (!files?.length || !projectId) return;
