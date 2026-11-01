@@ -121,10 +121,10 @@ function GeneratorPage() {
         setPlan(gp);
         const states = gp.scenes.map((_, i) => {
           const s = byScene.get(i);
-          if (s) return { ...s, status: sceneReady(s) ? "ready" as const : "pending" as const };
+          if (s && sceneReady(s)) return { ...s, status: "ready" as const };
           const job = latestVideo.get(i);
-          if (job?.status === "failed") return { status: "failed" as const, error: job.error === "Internal error encountered." ? "تعطلت خدمة الفيديو أثناء إنشاء هذه اللقطة؛ أعد محاولة هذه اللقطة فقط." : job.error ?? "تعذر إنشاء اللقطة" };
-          return { status: "pending" as const };
+          if (job?.status === "failed") return { ...s, status: "failed" as const, error: job.error === "Internal error encountered." ? "تعطلت خدمة الفيديو أثناء إنشاء هذه اللقطة؛ أعد محاولة هذه اللقطة فقط." : job.error ?? "تعذر إنشاء اللقطة" };
+          return { ...s, status: "pending" as const };
         });
         setScenes(states);
         setStep(states.every((s) => s.status === "ready") && states.length > 0 ? "done" : "plan");
