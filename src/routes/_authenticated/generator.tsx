@@ -233,10 +233,10 @@ function GeneratorPage() {
     if (updateError) throw updateError;
   }
 
-  async function renderScene(i: number, voiceOnly = false): Promise<boolean> {
+  async function renderScene(i: number, voiceOnly = false, knownState?: SceneState): Promise<boolean> {
     const scene = plan?.scenes[i];
     if (!scene || !projectId) return false;
-    const current = scenes[i];
+    const current = knownState ?? scenes[i];
     setScene(i, { status: current?.videoUrl ? "voicing" : "rendering", error: undefined });
     // Begin speech while the single-video queue renders, instead of waiting twice.
     const narration = (async () => {
@@ -293,7 +293,7 @@ function GeneratorPage() {
         if (stopRef.current) return;
         const known = states?.[i] ?? scenes[i];
         if (known?.status === "ready" && known?.voice === voice && known?.dialect === dialect && known?.delivery === delivery && known?.pace === pace) continue;
-        if (!await renderScene(i)) { complete = false; break; }
+        if (!await renderScene(i, false, states?.[i])) { complete = false; break; }
       }
       setStep("done");
       if (complete) toast.success("اكتمل الفيديو والتعليق الصوتي");
