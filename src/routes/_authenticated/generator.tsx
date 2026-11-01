@@ -280,17 +280,19 @@ function GeneratorPage() {
     }
   }
 
-  async function generateAll() {
-    if (!plan || busy) return;
+  async function generateAll(p: GenPlan | undefined = plan, states: SceneState[] | undefined = undefined) {
+    const activePlan = p ?? plan;
+    if (!activePlan || busy) return;
     setBusy(true);
     setStep("generating");
     stopRef.current = false;
     try {
       await saveSettings();
       let complete = true;
-      for (let i = 0; i < plan.scenes.length; i++) {
+      for (let i = 0; i < activePlan.scenes.length; i++) {
         if (stopRef.current) return;
-        if (scenes[i]?.status === "ready" && scenes[i]?.voice === voice && scenes[i]?.dialect === dialect && scenes[i]?.delivery === delivery && scenes[i]?.pace === pace) continue;
+        const known = states?.[i] ?? scenes[i];
+        if (known?.status === "ready" && known?.voice === voice && known?.dialect === dialect && known?.delivery === delivery && known?.pace === pace) continue;
         if (!await renderScene(i)) { complete = false; break; }
       }
       setStep("done");
@@ -301,6 +303,7 @@ function GeneratorPage() {
       toast.error(e.message);
     } finally { setBusy(false); }
   }
+  generateAllRef.current = generateAll;
 
   async function retryScene(i: number, voiceOnly = false) {
     if (busy) return;
