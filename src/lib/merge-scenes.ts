@@ -7,8 +7,7 @@ import { toBlobURL } from "@ffmpeg/util";
 import wasmAsset from "@/assets/ffmpeg-core.wasm.asset.json";
 
 const CORE_URL = "/ffmpeg/ffmpeg-core.js";
-const XFADE = 0.5; // video crossfade seconds between shots
-const AFADE = 0.3; // audio crossfade seconds
+const XFADE = 0.5; // crossfade seconds between shots (video and audio use the same overlap so they stay in sync)
 
 let ffmpeg: FFmpeg | null = null;
 let loading: Promise<FFmpeg> | null = null;
@@ -83,21 +82,25 @@ export async function mergeScenes(
     vchain = parts.join(";");
   }
 
-  // Audio: chained acrossfade so the voiceover flows without clicks or sudden silence.
+  // Audio: trim each voiceover to its shot's duration (TTS runs long and would drift out of
+  // sync), then chain acrossfades with the same overlap as the video so both end together.
   let achain = "";
   if (withAudio) {
+    const parts: string[] = [];
+    for (let i = 0; i < n; i++) {
+      parts.push(`[${n + i}:a]atrim=0:${scenes[i]!.duration.toFixed(2)},asetpts=PTS-STARTPTS[at${i}]`);
+    }
     if (n === 1) {
-      achain = `[${n}:a]anull[aout]`;
+      parts.push("[at0]anull[aout]");
     } else {
-      const parts: string[] = [];
-      let prev = `[${n}:a]`;
+      let prev = "[at0]";
       for (let i = 1; i < n; i++) {
         const out = i === n - 1 ? "[aout]" : `[ax${i}]`;
-        parts.push(`${prev}[${n + i}:a]acrossfade=d=${AFADE}${out}`);
+        parts.push(`${prev}[at${i}]acrossfade=d=${XFADE}${out}`);
         prev = out;
       }
-      achain = parts.join(";");
     }
+    achain = parts.join(";");
   }
 
   onProgress?.("جارٍ تركيب الفيديو النهائي بالانتقالات…");
