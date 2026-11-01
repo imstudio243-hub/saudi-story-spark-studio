@@ -421,6 +421,46 @@ const GEN_RULES = `أنت مخرج فيديو محترف في iM STUDIO. مهم�
 - حافظ على الشخصيات والعناصر نفسها (الملامح، الملابس، الألوان، الإضاءة، الخلفية) عبر اللقطات، وكرر وصفها حرفيًا في كل video_prompt.
 - اللقطة الأولى تبدأ جذبًا للانتباه، والأخيرة تنتهي بخاتمة متكاملة تكشف العلامة.`;
 
+// ---------- Reference video style analysis ----------
+const STYLE_RULES = `أنت محلل أسلوب فيديوهات إعلانية في iM STUDIO. ستصلك لقطات (إطارات) مرتبة زمنيًا من فيديو مرجعي أرفقه المستخدم.
+حلّلها وأخرج «موجز أسلوب» عربيًا مكثفًا يصف بدقة:
+1. الشخصيات: الملامح، الشعر، الملابس، الألوان، أسلوب الرسم (كرتوني ثنائي/ثلاثي الأبعاد/واقعي)، ووصفًا إنجليزيًا دقيقًا للشخصية يصلح للصقه حرفيًا في موجه توليد فيديو.
+2. الهوية البصرية: الألوان السائدة، الخلفيات، الإضاءة، المزاج العام.
+3. النصوص على الشاشة: أسلوب العناوين، مواضعها، الشريط السفلي للكتابة المتزامنة مع الكلام إن وجد.
+4. التنقلات والإيقاع: كيف تنتقل المشاهد، سرعة الإيقاع، حركات الكاميرا أو الحركة الرسومية.
+5. أسلوب الكلام: اللهجة، النبرة، طول الجمل، طريقة مخاطبة الجمهور.
+اكتب الموجز بالعربية، وأدرج داخله فقرة بعنوان CHARACTER_EN: تصف الشخصية بالإنجليزية في 40 كلمة كحد أقصى. لا تتجاوز 250 كلمة إجمالًا.`;
+
+export const analyzeReferenceVideo = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(z.object({ projectId: z.string().uuid(), assetIds: z.array(z.string().uuid()).min(2).max(8) }))
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { data: assets } = await supabase
+      .from("assets")
+      .select("id, storage_path, mime, meta")
+      .eq("project_id", data.projectId)
+      .in("id", data.assetIds);
+    const frames = (assets ?? [])
+      .filter((a) => (a.meta as any)?.refRole === "video-frame")
+      .sort((a, b) => ((a.meta as any)?.frameAt ?? 0) - ((b.meta as any)?.frameAt ?? 0));
+    if (frames.length < 2) throw new Error("لم تُعثر على إطارات الفيديو المرجعي.");
+    const parts: any[] = [
+      { type: "input_text", text: `هذه ${frames.length} إطارات مرتبة زمنيًا من فيديو مرجعي واحد. حلّل أسلوبه وفق التعليمات.` },
+    ];
+    for (const f of frames) {
+      parts.push({ type: "input_image", image_url: `data:${f.mime};base64,${await readAsset(supabase, f.storage_path)}` });
+    }
+    const brief = (await respond({ instructions: STYLE_RULES, messages: [{ role: "user", content: parts }] })).slice(0, 3000);
+    const { data: proj } = await supabase.from("projects").select("data").eq("id", data.projectId).single();
+    await supabase
+      .from("projects")
+      .update({ data: { ...((proj?.data as object) ?? {}), styleBrief: brief }, updated_at: new Date().toISOString() })
+      .eq("id", data.projectId);
+    await logUsage(supabase, userId, { service: "style_analysis", model: MODELS.text, units: 1, unit: "request" });
+    return { brief };
+  });
+
 export const planGenerator = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(
@@ -450,9 +490,11 @@ export const planGenerator = createServerFn({ method: "POST" })
     for (const a of assets ?? []) {
       parts.push({ type: "input_image", image_url: `data:${a.mime};base64,${await readAsset(supabase, a.storage_path)}` });
     }
+    const { data: projData } = await supabase.from("projects").select("data").eq("id", data.projectId).single();
+    const styleBrief = (projData?.data as any)?.styleBrief as string | undefined;
     parts.unshift({
       type: "input_text",
-      text: `أنشئ خطة فيديو من ${range[0]} إلى ${range[1]} لقطة قصيرة مترابطة ومتنوعة (المدة الإجمالية ${data.duration} ثانية بالضبط). مدة كل لقطة بين 3 و10 ثوانٍ، ومجموع مدد اللقطات يساوي ${data.duration} بالضبط. وزّع القصة والتعليق الصوتي على اللقطات كاملة بشكل متناسق.\n\nوصف المستخدم (التزم به حرفيًا):\n${data.description}`,
+      text: `أنشئ خطة فيديو من ${range[0]} إلى ${range[1]} لقطة قصيرة مترابطة ومتنوعة (المدة الإجمالية ${data.duration} ثانية بالضبط). مدة كل لقطة بين 3 و10 ثوانٍ، ومجموع مدد اللقطات يساوي ${data.duration} بالضبط. وزّع القصة والتعليق الصوتي على اللقطات كاملة بشكل متناسق.\n\nوصف المستخدم (التزم به حرفيًا):\n${data.description}${styleBrief ? `\n\nموجز أسلوب الفيديو المرجعي (قلّده بالكامل: الشخصية نفسها، الألوان، أسلوب النصوص على الشاشة، التنقلات، الإيقاع، وأسلوب الكلام — مع تغيير الموضوع إلى موضوع المستخدم فقط):\n${styleBrief}\n\nالتزامات إلزامية عند وجود موجز الأسلوب:\n- الصق وصف CHARACTER_EN حرفيًا في بداية كل video_prompt لضمان ثبات الشخصية 100% عبر اللقطات.\n- استخدم أسلوب النصوص والشريط السفلي نفسه في توجيه المشاهد، ووزّع التعليق الصوتي بأسلوب الكلام نفسه (اللهجة والنبرة وطول الجمل).\n- اجعل transition لكل لقطة يحاكي تنقلات الفيديو المرجعي.` : ""}`,
     });
     const text = await respond({ instructions: GEN_RULES, messages: [{ role: "user", content: parts }], schema: { name: "gen_plan", schema: genPlanSchema } });
     const plan = JSON.parse(text) as GenPlan;

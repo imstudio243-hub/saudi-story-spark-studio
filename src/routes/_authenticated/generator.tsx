@@ -2,10 +2,10 @@ import { useServerFn } from "@tanstack/react-start";
 import { captionCues, sceneReady } from "@/lib/narration-timeline";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Clapperboard, Download, ImagePlus, Loader2, Pause, Play, RefreshCw, Sparkles, Wand2 } from "lucide-react";
+import { Clapperboard, Download, Film, ImagePlus, Loader2, Pause, Play, Plus, RefreshCw, Sparkles, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { planGenerator, startSceneVideo, generateSceneVoice, pollJob, findRunningSceneJob } from "@/lib/studio.functions";
+import { planGenerator, startSceneVideo, generateSceneVoice, pollJob, findRunningSceneJob, analyzeReferenceVideo } from "@/lib/studio.functions";
 import { ASPECTS, DELIVERY, DIALECTS, GEN_DURATIONS, RESOLUTIONS, VOICES, type GenPlan } from "@/lib/catalog";
 import { formatCredits, planTotalCredits, sceneTotalCredits } from "@/lib/gen-cost";
 import { Button } from "@/components/ui/button";
@@ -61,6 +61,7 @@ function GeneratorPage() {
   const voiceFn = useServerFn(generateSceneVoice);
   const pollFn = useServerFn(pollJob);
   const runningFn = useServerFn(findRunningSceneJob);
+  const analyzeFn = useServerFn(analyzeReferenceVideo);
   const { project: resumeId } = Route.useSearch();
   const navigate = useNavigate();
   const [step, setStep] = useState<"describe" | "plan" | "generating" | "done">("describe");
@@ -78,6 +79,8 @@ function GeneratorPage() {
   const [scenes, setScenes] = useState<SceneState[]>([]);
   const [busy, setBusy] = useState(false);
   const [merging, setMerging] = useState<string | null>(null);
+  const [styleBrief, setStyleBrief] = useState<string | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
   const stopRef = useRef(false);
 
   // Resume an existing generator project. Returns the restored scene states so the
@@ -95,6 +98,8 @@ function GeneratorPage() {
       if (gs?.pace) setPace(gs.pace);
       if (gs?.aspect) setAspect(gs.aspect);
       if (gs?.resolution) setResolution(gs.resolution);
+      const brief = (p.data as any)?.styleBrief as string | undefined;
+      if (brief) setStyleBrief(brief);
       const { data: assets } = await supabase
         .from("assets")
         .select("id,kind,mime,storage_path,meta")
@@ -191,6 +196,55 @@ function GeneratorPage() {
       toast.error(e.message || "تعذر رفع الصور");
     } finally {
       setBusy(false);
+    }
+  }
+
+  // Small square attach button: image → reference image; video → extract frames,
+  // upload them, then analyze the reference style so the plan mimics it.
+  async function uploadReference(files: FileList | null) {
+    const file = files?.[0];
+    if (!file) return;
+    if (file.type.startsWith("image/")) return uploadRefs(files);
+    if (!file.type.startsWith("video/")) { toast.error("اختر صورة أو فيديو مرجعيًا"); return; }
+    setAnalyzing(true);
+    try {
+      let pid = projectId;
+      if (!pid) {
+        const { data: proj, error } = await supabase
+          .from("projects")
+          .insert({ name: description.slice(0, 60) || "فيديو من وصف", kind: "generator" })
+          .select()
+          .single();
+        if (error || !proj) throw new Error("تعذر إنشاء المشروع");
+        pid = proj.id;
+        setProjectId(pid);
+        navigate({ to: "/generator", search: { project: pid }, replace: true });
+      }
+      const { extractVideoFrames } = await import("@/lib/video-frames");
+      const frames = await extractVideoFrames(file, 6);
+      const { data: u } = await supabase.auth.getUser();
+      if (!u.user) throw new Error("الجلسة غير صالحة");
+      const ids: string[] = [];
+      for (const frame of frames) {
+        const path = `${u.user.id}/${pid}/${crypto.randomUUID()}.jpg`;
+        const { error } = await supabase.storage.from("studio").upload(path, frame.blob, { contentType: frame.mime });
+        if (error) throw error;
+        const { data: asset } = await supabase
+          .from("assets")
+          .insert({ project_id: pid, kind: "image", source: "uploaded", storage_path: path, mime: frame.mime, size: frame.blob.size, meta: { refRole: "video-frame", frameAt: frame.at } })
+          .select()
+          .single();
+        if (!asset) throw new Error("تعذر حفظ إطار من الفيديو");
+        ids.push(asset.id);
+      }
+      toast.success("تم استخراج لقطات الفيديو — جارٍ تحليل أسلوبه…");
+      const { brief } = await analyzeFn({ data: { projectId: pid, assetIds: ids } });
+      setStyleBrief(brief);
+      toast.success("تم فهم أسلوب الفيديو — سيُقلَّد في إعلانك");
+    } catch (e: any) {
+      toast.error(e.message || "تعذر تحليل الفيديو المرجعي");
+    } finally {
+      setAnalyzing(false);
     }
   }
 
@@ -344,13 +398,29 @@ function GeneratorPage() {
       {/* Step 1: description & settings */}
       <section className="glass space-y-4 rounded-2xl p-5">
         <h2 className="flex items-center gap-2 font-bold"><Wand2 className="h-5 w-5 text-gold" /> وصف الفيديو</h2>
-        <Textarea
-          placeholder="مثال: أنشئ فيديو شرح لتطبيق برق للتمويل مدته 30 ثانية، يظهر فيه هاتف ذكي فقط دون ظهور أشخاص، مع تعليق صوتي رجالي باللهجة السعودية يشرح خطوات استخدام التطبيق…"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          rows={4}
-          disabled={step === "generating"}
-        />
+        <div className="relative">
+          <Textarea
+            placeholder="مثال: أنشئ فيديو شرح لتطبيق برق للتمويل مدته 30 ثانية، يظهر فيه هاتف ذكي فقط دون ظهور أشخاص، مع تعليق صوتي رجالي باللهجة السعودية يشرح خطوات استخدام التطبيق…"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={4}
+            disabled={step === "generating"}
+            className="pb-12"
+          />
+          <label className="absolute bottom-2.5 left-2.5 cursor-pointer" title="أرفق صورة منتج أو فيديو مرجعيًا ليقلّد الذكاء أسلوبه">
+            <input type="file" accept="image/*,video/*" className="hidden" disabled={analyzing || step === "generating"} onChange={(e) => { void uploadReference(e.target.files); e.target.value = ""; }} />
+            <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground transition-colors hover:border-gold hover:text-gold">
+              {analyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+            </span>
+          </label>
+        </div>
+        {analyzing && <p className="text-xs text-muted-foreground">جارٍ استخراج لقطات الفيديو وفهم أسلوبه (الشخصيات، الألوان، التنقلات، الكلام)…</p>}
+        {styleBrief && !analyzing && (
+          <div className="flex items-start gap-2 rounded-xl border border-gold/30 bg-gold/5 p-3 text-xs">
+            <Film className="mt-0.5 h-4 w-4 shrink-0 text-gold" />
+            <p className="text-muted-foreground"><span className="font-bold text-gold">تم فهم أسلوب الفيديو المرجعي</span> — سيُقلَّد في إعلانك: {styleBrief.slice(0, 180)}…</p>
+          </div>
+        )}
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="space-y-1.5">
             <Label>مدة الفيديو</Label>
