@@ -80,11 +80,12 @@ function GeneratorPage() {
   const [merging, setMerging] = useState<string | null>(null);
   const stopRef = useRef(false);
 
-  // Resume an existing generator project.
+  // Resume an existing generator project. Returns the restored scene states so the
+  // caller can auto-continue unfinished work without waiting for React state.
   const resume = useCallback(
-    async (id: string) => {
+    async (id: string): Promise<SceneState[] | null> => {
       const { data: p } = await supabase.from("projects").select("*").eq("id", id).single();
-      if (!p) return;
+      if (!p) return null;
       const gp = (p.data as any)?.genPlan as GenPlan | undefined;
       const gs = (p.data as any)?.genSettings as { duration?: number; voice?: string; dialect?: string; delivery?: string; pace?: "slow" | "normal" | "fast"; aspect?: "16:9" | "9:16"; resolution?: "720p" | "1080p" } | undefined;
       if (gs?.duration) setDuration(gs.duration as 10 | 20 | 30);
