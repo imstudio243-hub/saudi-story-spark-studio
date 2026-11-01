@@ -108,7 +108,7 @@ export async function mergeScenes(
   onProgress?.("جارٍ تركيب الفيديو النهائي بالانتقالات…");
   const fc = withAudio ? `${vchain};${achain}` : vchain;
   const mapArgs = withAudio ? ["-map", "[vout]", "-map", "[aout]"] : ["-map", "[vout]"];
-  await f.run(...args, "-filter_complex", fc, ...mapArgs, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", "final.mp4");
+  await f.run(...args, "-filter_complex", fc, ...mapArgs, "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", "final.mp4");
 
   const data = f.FS("readFile", "final.mp4") as Uint8Array;
   try {
