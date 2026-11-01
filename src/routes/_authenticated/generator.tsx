@@ -100,6 +100,12 @@ function GeneratorPage() {
         .order("created_at", { ascending: false });
       const refs: RefImage[] = [];
       const byScene = new Map<number, SceneState>();
+      const { data: jobs } = await supabase.from("generation_jobs").select("kind,status,error,input").eq("project_id", id).order("created_at", { ascending: false });
+      const latestVideo = new Map<number, { status: string; error: string | null }>();
+      for (const job of jobs ?? []) {
+        const index = (job.input as any)?.sceneIndex;
+        if (job.kind === "video" && typeof index === "number" && !latestVideo.has(index)) latestVideo.set(index, job);
+      }
       for (const a of assets ?? []) {
         const url = await sign(a.storage_path);
         if (a.kind === "image") refs.push({ id: a.id, url, path: a.storage_path, mime: a.mime });
@@ -115,8 +121,10 @@ function GeneratorPage() {
         setPlan(gp);
         const states = gp.scenes.map((_, i) => {
           const s = byScene.get(i);
-          if (s) return { ...s, status: sceneReady(s) ? "ready" as const : "pending" as const };
-          return { status: "pending" as const };
+          if (s && sceneReady(s)) return { ...s, status: "ready" as const };
+          const job = latestVideo.get(i);
+          if (job?.status === "failed") return { ...s, status: "failed" as const, error: job.error === "Internal error encountered." ? "تعطلت خدمة الفيديو أثناء إنشاء هذه اللقطة؛ أعد محاولة هذه اللقطة فقط." : job.error ?? "تعذر إنشاء اللقطة" };
+          return { ...s, status: "pending" as const };
         });
         setScenes(states);
         setStep(states.every((s) => s.status === "ready") && states.length > 0 ? "done" : "plan");
@@ -229,7 +237,7 @@ function GeneratorPage() {
           await new Promise((resolve) => setTimeout(resolve, 5000));
           const result = await pollFn({ data: { jobId } });
           if (result.status === "completed") break;
-          if (result.status === "failed") throw new Error(result.error || "فشل توليد اللقطة");
+          if (result.status === "failed") throw new Error(result.error === "Internal error encountered." ? "تعطلت خدمة الفيديو أثناء إنشاء هذه اللقطة. اللقطات الناجحة محفوظة؛ يمكنك إعادة محاولة هذه اللقطة فقط." : result.error || "فشل توليد اللقطة");
         }
         const { data: asset } = await supabase.from("assets").select("id,storage_path").eq("project_id", projectId).eq("kind", "video").eq("meta->>sceneIndex", String(i)).order("created_at", { ascending: false }).limit(1).single();
         videoUrl = asset ? await sign(asset.storage_path) : undefined;
@@ -437,13 +445,14 @@ function GeneratorPage() {
                       </Button>
                     </div>
                   )}
+                  {st?.status === "pending" && step !== "generating" && <Button size="sm" variant="outline" disabled={busy} onClick={() => retryScene(i)}><Play className="h-3.5 w-3.5" /> إنشاء لقطة {i + 1}</Button>}
                 </div>
               );
             })}
           </div>
-          {step === "plan" && (
+          {(step === "plan" || (step === "done" && !allReady)) && (
             <Button variant="luxe" onClick={generateAll} disabled={busy} className="h-11 w-full">
-              <Clapperboard /> ابدأ توليد الفيديو ({plan.scenes.length} {plan.scenes.length === 1 ? "لقطة" : "لقطات"} + الصوت)
+              <Clapperboard /> {step === "done" ? "استكمال اللقطات المتبقية والصوت" : `ابدأ توليد الفيديو (${plan.scenes.length} لقطات + الصوت)`}
             </Button>
           )}
           {step === "generating" && (
@@ -500,8 +509,12 @@ function ScenePlayer({ scenes, aspect, plan }: { scenes: SceneState[]; aspect: "
     const v = videoRef.current;
     const a = audioRef.current;
     if (!v || !a || !audioUrl) { toast.error("التعليق الصوتي لم يكتمل بعد"); setPlaying(false); return; }
-    try { await Promise.all([v.play(), a.play()]); }
-    catch { v.pause(); a.pause(); setPlaying(false); toast.error("اضغط تشغيل للسماح بالصوت، أو أعد تحميل التعليق"); }
+    try {
+      // A source codec failure must not hide the separately generated Arabic narration.
+      const videoPlayback = v.play().catch(() => { toast.error("تعذر تشغيل صورة المقطع في هذا المتصفح؛ يمكنك سماع التعليق وتنزيل الفيديو النهائي."); });
+      await a.play();
+      await videoPlayback;
+    } catch { v.pause(); a.pause(); setPlaying(false); toast.error("اضغط تشغيل للسماح بالصوت، أو أعد تحميل التعليق"); }
   }
 
   useEffect(() => {
@@ -523,7 +536,7 @@ function ScenePlayer({ scenes, aspect, plan }: { scenes: SceneState[]; aspect: "
   function advance() {
     const v = videoRef.current;
     const a = audioRef.current;
-    if (!v?.ended || !a?.ended) return;
+    if ((!v?.ended && !v?.error) || !a?.ended) return;
     if (idx < ready.length - 1) setIdx(idx + 1);
     else { setPlaying(false); setIdx(0); if (v) v.currentTime = 0; if (a) a.currentTime = 0; }
   }
@@ -539,7 +552,7 @@ function ScenePlayer({ scenes, aspect, plan }: { scenes: SceneState[]; aspect: "
       <div className="flex flex-wrap items-center justify-center gap-2">
         {ready.map((s, j) => <Button key={s.i} variant={j === idx ? "default" : "outline"} size="sm" aria-label={`لقطة ${s.i + 1}`} onClick={() => { videoRef.current?.pause(); audioRef.current?.pause(); setPlaying(false); setIdx(j); }}>{s.i + 1}</Button>)}
       </div>
-      <p className="text-center text-xs text-muted-foreground">لقطة {cur.i + 1} من {ready.length} {audioUrl ? `· ${VOICES.find((v) => v.id === cur.voice)?.label ?? "تعليق عربي"}` : "· التعليق الصوتي غير مكتمل"}</p>
+      <p className="text-center text-xs text-muted-foreground">لقطة {cur.i + 1} من {plan?.scenes.length ?? scenes.length} · الجاهز {ready.length} {audioUrl ? `· ${VOICES.find((v) => v.id === cur.voice)?.label ?? "تعليق عربي"}` : "· التعليق الصوتي غير مكتمل"}</p>
     </div>
   );
 }
