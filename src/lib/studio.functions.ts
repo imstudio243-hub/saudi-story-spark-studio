@@ -171,7 +171,7 @@ export const pollJob = createServerFn({ method: "POST" })
       const input = job.input as any;
       const { data: asset } = await supabase
         .from("assets")
-        .insert({ user_id: userId, project_id: job.project_id, kind: "video", source: "generated", storage_path: path, mime: "video/mp4", size: bytes.byteLength, meta: { duration: input.duration, aspect: input.aspect, resolution: input.resolution, jobId: job.id } })
+        .insert({ user_id: userId, project_id: job.project_id!, kind: "video", source: "generated", storage_path: path, mime: "video/mp4", size: bytes.byteLength, meta: { duration: input.duration, aspect: input.aspect, resolution: input.resolution, jobId: job.id } })
         .select()
         .single();
       await supabase.from("generation_jobs").update({ status: "completed", output_asset_id: asset?.id ?? null, updated_at: new Date().toISOString() }).eq("id", job.id);
@@ -285,6 +285,7 @@ export const chatSend = createServerFn({ method: "POST" })
           .select()
           .single();
         if (error) throw new Error(error.message);
+        if (!proj) throw new Error("تعذر إنشاء المشروع.");
         if (data.image) {
           const ext = data.image.mime.split("/")[1];
           const path = `${userId}/${proj.id}/${crypto.randomUUID()}.${ext}`;
@@ -295,6 +296,7 @@ export const chatSend = createServerFn({ method: "POST" })
         result = { type: "create_project", ok: true, message: `تم إنشاء المشروع «${proj.name}»`, projectId: proj.id };
       } else if (out.action.type === "generate_voice" && out.action.voice_text) {
         const { data: proj } = await supabase.from("projects").insert({ user_id: userId, name: "صوت من iM AI", kind: "voice" }).select().single();
+        if (!proj) throw new Error("تعذر إنشاء المشروع.");
         await makeVoice(supabase, userId, {
           projectId: proj.id,
           text: out.action.voice_text,
