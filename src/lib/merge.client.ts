@@ -1,24 +1,24 @@
 // Browser-only scene merger: joins shot MP4s with cinematic crossfades and voiceover WAVs
-// with acrossfades into one MP4, via ffmpeg.wasm (single-threaded core, no SharedArrayBuffer),
-// loaded lazily from CDN.
+// with acrossfades into one MP4, via ffmpeg.wasm 0.12 (single-threaded core served
+// same-origin, no SharedArrayBuffer needed). Loaded lazily on first export.
 
-import { createFFmpeg } from "@ffmpeg/ffmpeg";
+import { FFmpeg } from "@ffmpeg/ffmpeg";
 import wasmAsset from "@/assets/ffmpeg-core.wasm.asset.json";
 
-const CORE_PATH = "/ffmpeg/ffmpeg-core.js"; // single-threaded core served same-origin (no SharedArrayBuffer needed)
+const CORE_URL = "/ffmpeg/ffmpeg-core.js";
 const XFADE = 0.5; // video crossfade seconds between shots
 const AFADE = 0.3; // audio crossfade seconds
 
-let ffmpeg: any = null;
-let loading: Promise<any> | null = null;
+let ffmpeg: FFmpeg | null = null;
+let loading: Promise<FFmpeg> | null = null;
 
 async function getFfmpeg(onProgress?: (msg: string) => void) {
   if (ffmpeg) return ffmpeg;
   if (!loading) {
     loading = (async () => {
       onProgress?.("جارٍ تحميل أداة الدمج (أول مرة فقط)…");
-      const f = createFFmpeg({ log: false, corePath: CORE_PATH, wasmPath: wasmAsset.url });
-      await f.load();
+      const f = new FFmpeg();
+      await f.load({ coreURL: CORE_URL, wasmURL: wasmAsset.url });
       ffmpeg = f;
       return f;
     })();
@@ -49,11 +49,11 @@ export async function mergeScenes(
   const cleanup: string[] = [];
   for (let i = 0; i < n; i++) {
     const scene = scenes[i]!;
-    f.FS("writeFile", `v${i}.mp4`, await fetchBytes(scene.videoUrl));
+    await f.writeFile(`v${i}.mp4`, await fetchBytes(scene.videoUrl));
     args.push("-i", `v${i}.mp4`);
     cleanup.push(`v${i}.mp4`);
     if (withAudio) {
-      f.FS("writeFile", `a${i}.wav`, await fetchBytes(scene.audioUrl!));
+      await f.writeFile(`a${i}.wav`, await fetchBytes(scene.audioUrl!));
       args.push("-i", `a${i}.wav`);
       cleanup.push(`a${i}.wav`);
     }
@@ -97,13 +97,18 @@ export async function mergeScenes(
   onProgress?.("جارٍ تركيب الفيديو النهائي بالانتقالات…");
   const fc = withAudio ? `${vchain};${achain}` : vchain;
   const mapArgs = withAudio ? ["-map", "[vout]", "-map", "[aout]"] : ["-map", "[vout]"];
-  await f.run(...args, "-filter_complex", fc, ...mapArgs, "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", "final.mp4");
+  const ok = await f.exec(
+    [...args, "-filter_complex", fc, ...mapArgs, "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", "final.mp4"],
+    300000,
+  );
+  if (ok !== 0) throw new Error("فشل تركيب الفيديو النهائي.");
 
-  const data = f.FS("readFile", "final.mp4") as Uint8Array;
+  const data = (await f.readFile("final.mp4")) as Uint8Array;
   try {
-    for (const name of [...cleanup, "final.mp4"]) f.FS("unlink", name);
+    for (const name of [...cleanup, "final.mp4"]) await f.deleteFile(name);
   } catch {
     /* ignore */
   }
-  return new Blob([data.buffer as ArrayBuffer], { type: "video/mp4" });
+  const buf = new Uint8Array(data).buffer as ArrayBuffer;
+  return new Blob([buf], { type: "video/mp4" });
 }
