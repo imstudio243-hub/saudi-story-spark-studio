@@ -229,7 +229,7 @@ function GeneratorPage() {
           await new Promise((resolve) => setTimeout(resolve, 5000));
           const result = await pollFn({ data: { jobId } });
           if (result.status === "completed") break;
-          if (result.status === "failed") throw new Error(result.error || "فشل توليد اللقطة");
+          if (result.status === "failed") throw new Error(result.error === "Internal error encountered." ? "تعطلت خدمة الفيديو أثناء إنشاء هذه اللقطة. اللقطات الناجحة محفوظة؛ يمكنك إعادة محاولة هذه اللقطة فقط." : result.error || "فشل توليد اللقطة");
         }
         const { data: asset } = await supabase.from("assets").select("id,storage_path").eq("project_id", projectId).eq("kind", "video").eq("meta->>sceneIndex", String(i)).order("created_at", { ascending: false }).limit(1).single();
         videoUrl = asset ? await sign(asset.storage_path) : undefined;
@@ -441,9 +441,9 @@ function GeneratorPage() {
               );
             })}
           </div>
-          {step === "plan" && (
+          {(step === "plan" || (step === "done" && !allReady)) && (
             <Button variant="luxe" onClick={generateAll} disabled={busy} className="h-11 w-full">
-              <Clapperboard /> ابدأ توليد الفيديو ({plan.scenes.length} {plan.scenes.length === 1 ? "لقطة" : "لقطات"} + الصوت)
+              <Clapperboard /> {step === "done" ? "استكمال اللقطات المتبقية والصوت" : `ابدأ توليد الفيديو (${plan.scenes.length} لقطات + الصوت)`}
             </Button>
           )}
           {step === "generating" && (
