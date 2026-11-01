@@ -156,6 +156,21 @@ export const pollJob = createServerFn({ method: "POST" })
     const v = await getVideo(job.provider_job_id);
     if (v.status === "failed") {
       const msg = v.error?.message || "فشل توليد الفيديو.";
+      const prev = job.input as any;
+      // One automatic recovery for text-only scenes: retry with a simplified prompt on the same job row.
+      if (isProviderInternalError(msg) && !prev?.simplified && !(prev?.assetIds?.length) && typeof prev?.prompt === "string") {
+        try {
+          const prompt = await simplifyVideoPrompt(prev.prompt);
+          const retry = await createVideo({ prompt, images: [], duration: prev.duration, aspect: prev.aspect, resolution: prev.resolution });
+          await supabase
+            .from("generation_jobs")
+            .update({ provider_job_id: retry.id, input: { ...prev, prompt, originalPrompt: prev.prompt, simplified: true }, error: null, updated_at: new Date().toISOString() })
+            .eq("id", job.id);
+          return { status: "running", progress: null, simplified: true };
+        } catch {
+          /* fall through and report the original failure */
+        }
+      }
       await supabase.from("generation_jobs").update({ status: "failed", error: msg, updated_at: new Date().toISOString() }).eq("id", job.id);
       return { status: "failed", error: msg };
     }
