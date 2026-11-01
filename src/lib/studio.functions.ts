@@ -189,7 +189,7 @@ export const pollJob = createServerFn({ method: "POST" })
   });
 
 // ---------- Voice ----------
-async function makeVoice(supabase: any, userId: string, p: { projectId: string; text: string; voice: string; dialect: string; delivery: string; pace: string }) {
+async function makeVoice(supabase: any, userId: string, p: { projectId: string; text: string; voice: string; dialect: string; delivery: string; pace: string; sceneIndex?: number }) {
   const { data: job } = await supabase
     .from("generation_jobs")
     .insert({ user_id: userId, project_id: p.projectId, kind: "voice", status: "running", model: MODELS.speech, input: p })
@@ -203,7 +203,7 @@ async function makeVoice(supabase: any, userId: string, p: { projectId: string; 
     if (up.error) throw new Error("تعذر حفظ الصوت.");
     const { data: asset } = await supabase
       .from("assets")
-      .insert({ user_id: userId, project_id: p.projectId, kind: "audio", source: "generated", storage_path: path, mime: "audio/wav", size: wav.byteLength, meta: { voice: p.voice, dialect: p.dialect, delivery: p.delivery, text: p.text.slice(0, 500) } })
+      .insert({ user_id: userId, project_id: p.projectId, kind: "audio", source: "generated", storage_path: path, mime: "audio/wav", size: wav.byteLength, meta: { voice: p.voice, dialect: p.dialect, delivery: p.delivery, text: p.text.slice(0, 500), ...(p.sceneIndex !== undefined ? { sceneIndex: p.sceneIndex } : {}) } })
       .select()
       .single();
     await supabase.from("generation_jobs").update({ status: "completed", output_asset_id: asset.id, updated_at: new Date().toISOString() }).eq("id", job.id);
