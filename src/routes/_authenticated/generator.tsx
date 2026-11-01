@@ -80,11 +80,12 @@ function GeneratorPage() {
   const [merging, setMerging] = useState<string | null>(null);
   const stopRef = useRef(false);
 
-  // Resume an existing generator project.
+  // Resume an existing generator project. Returns the restored scene states so the
+  // caller can auto-continue unfinished work without waiting for React state.
   const resume = useCallback(
-    async (id: string) => {
+    async (id: string): Promise<{ states: SceneState[]; plan: GenPlan } | null> => {
       const { data: p } = await supabase.from("projects").select("*").eq("id", id).single();
-      if (!p) return;
+      if (!p) return null;
       const gp = (p.data as any)?.genPlan as GenPlan | undefined;
       const gs = (p.data as any)?.genSettings as { duration?: number; voice?: string; dialect?: string; delivery?: string; pace?: "slow" | "normal" | "fast"; aspect?: "16:9" | "9:16"; resolution?: "720p" | "1080p" } | undefined;
       if (gs?.duration) setDuration(gs.duration as 10 | 20 | 30);
@@ -129,18 +130,42 @@ function GeneratorPage() {
         });
         setScenes(states);
         setStep(states.every((s) => s.status === "ready") && states.length > 0 ? "done" : "plan");
+        return { states, plan: gp };
       }
+      return null;
     },
     [],
   );
 
+  // generateAll is assigned to a ref so the resume effect can auto-continue work.
+  const generateAllRef = useRef<((p?: GenPlan, states?: SceneState[]) => Promise<void>) | null>(null);
+
   useEffect(() => {
     stopRef.current = false;
-    if (resumeId) resume(resumeId);
+    if (resumeId) {
+      // Leaving the page never cancels provider-side jobs; on return, re-attach to
+      // running jobs and continue the remaining scenes automatically.
+      void resume(resumeId).then((r) => {
+        if (r?.states.some((s) => s.status !== "ready")) generateAllRef.current?.(r.plan, r.states);
+      });
+    }
     return () => {
       stopRef.current = true;
     };
   }, [resumeId, resume]);
+
+  // If the user switches away mid-generation and comes back, restart the polling loop.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && projectId && !busy) {
+        void resume(projectId).then((r) => {
+          if (r?.states.some((s: SceneState) => s.status !== "ready")) generateAllRef.current?.(r.plan, r.states);
+        });
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [projectId, busy, resume]);
 
   async function uploadRefs(files: FileList | null) {
     if (!files?.length || !projectId) return;
@@ -208,10 +233,10 @@ function GeneratorPage() {
     if (updateError) throw updateError;
   }
 
-  async function renderScene(i: number, voiceOnly = false): Promise<boolean> {
+  async function renderScene(i: number, voiceOnly = false, knownState?: SceneState): Promise<boolean> {
     const scene = plan?.scenes[i];
     if (!scene || !projectId) return false;
-    const current = scenes[i];
+    const current = knownState ?? scenes[i];
     setScene(i, { status: current?.videoUrl ? "voicing" : "rendering", error: undefined });
     // Begin speech while the single-video queue renders, instead of waiting twice.
     const narration = (async () => {
@@ -255,18 +280,20 @@ function GeneratorPage() {
     }
   }
 
-  async function generateAll() {
-    if (!plan || busy) return;
+  async function generateAll(p?: GenPlan | null, states?: SceneState[]) {
+    const activePlan = p ?? plan;
+    if (!activePlan || busy) return;
     setBusy(true);
     setStep("generating");
     stopRef.current = false;
     try {
       await saveSettings();
       let complete = true;
-      for (let i = 0; i < plan.scenes.length; i++) {
+      for (let i = 0; i < activePlan.scenes.length; i++) {
         if (stopRef.current) return;
-        if (scenes[i]?.status === "ready" && scenes[i]?.voice === voice && scenes[i]?.dialect === dialect && scenes[i]?.delivery === delivery && scenes[i]?.pace === pace) continue;
-        if (!await renderScene(i)) { complete = false; break; }
+        const known = states?.[i] ?? scenes[i];
+        if (known?.status === "ready" && known?.voice === voice && known?.dialect === dialect && known?.delivery === delivery && known?.pace === pace) continue;
+        if (!await renderScene(i, false, states?.[i])) { complete = false; break; }
       }
       setStep("done");
       if (complete) toast.success("اكتمل الفيديو والتعليق الصوتي");
@@ -276,6 +303,7 @@ function GeneratorPage() {
       toast.error(e.message);
     } finally { setBusy(false); }
   }
+  generateAllRef.current = generateAll;
 
   async function retryScene(i: number, voiceOnly = false) {
     if (busy) return;
@@ -453,7 +481,7 @@ function GeneratorPage() {
           </div>
           {(step === "plan" || (step === "done" && !allReady)) && (
             <div className="space-y-2">
-              <Button variant="luxe" onClick={generateAll} disabled={busy} className="h-11 w-full">
+              <Button variant="luxe" onClick={() => generateAll()} disabled={busy} className="h-11 w-full">
                 <Clapperboard /> {step === "done" ? "استكمال اللقطات المتبقية والصوت" : `ابدأ توليد الفيديو (${plan.scenes.length} لقطات + الصوت)`}
               </Button>
               <p className="text-center text-xs text-muted-foreground">
