@@ -171,8 +171,8 @@ function ProjectPage() {
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 {images.map((a) => (
                   <button key={a.id} type="button" onClick={() => setSelected((s) => (s.includes(a.id) ? s.filter((x) => x !== a.id) : [...s, a.id].slice(-3)))}
-                    className={`overflow-hidden rounded-xl border-2 transition ${selected.includes(a.id) ? "border-gold" : "border-transparent"}`}>
-                    <img src={a.url} alt="" className="aspect-square w-full object-cover" />
+                    className={`img-zoom animate-pop rounded-xl border-2 transition-all duration-300 ${selected.includes(a.id) ? "border-gold shadow-gold" : "border-transparent hover:border-border"}`}>
+                    <img src={a.url} alt="" className="img-zoom-inner aspect-square w-full object-cover" />
                   </button>
                 ))}
               </div>

@@ -76,8 +76,8 @@ function Dashboard() {
           {projects.map((p) => {
             const K = KINDS.find((k) => k.id === p.kind) ?? KINDS[0];
             return (
-              <Link key={p.id} to="/projects/$id" params={{ id: p.id }} className="glass group rounded-2xl p-5 transition hover:-translate-y-0.5 hover:shadow-luxe">
-                <K.icon className="h-6 w-6 text-gold" />
+              <Link key={p.id} to="/projects/$id" params={{ id: p.id }} className="glass card-hover group animate-pop rounded-2xl p-5">
+                <K.icon className="h-6 w-6 text-gold transition-transform duration-300 group-hover:scale-110" />
                 <h3 className="mt-3 font-bold">{p.name}</h3>
                 <p className="mt-1 text-xs text-muted-foreground">{K.label} · {STATUS[p.status] ?? p.status} · {new Date(p.updated_at).toLocaleDateString("ar-SA")}</p>
               </Link>

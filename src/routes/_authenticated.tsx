@@ -33,7 +33,7 @@ function Shell() {
           <Link to="/dashboard"><Logo /></Link>
           <nav className="hidden items-center gap-1 md:flex">
             {items.map((i) => (
-              <Link key={i.to} to={i.to} className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-muted-foreground hover:text-foreground" activeProps={{ className: "bg-accent text-foreground" }}>
+              <Link key={i.to} to={i.to} className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-muted-foreground transition-all duration-300 hover:-translate-y-0.5 hover:bg-accent/60 hover:text-foreground" activeProps={{ className: "bg-accent text-gold shadow-gold" }}>
                 <i.icon className="h-4 w-4" /> {i.label}
               </Link>
             ))}
@@ -47,7 +47,9 @@ function Shell() {
         </div>
       </header>
       <main className="mx-auto max-w-6xl px-4 py-6">
-        <Outlet />
+        <div className="animate-fade">
+          <Outlet />
+        </div>
       </main>
       <nav className="glass fixed inset-x-3 bottom-3 z-30 flex justify-around rounded-2xl p-2 md:hidden" style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}>
         {items.map((i) => (
