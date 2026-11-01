@@ -459,7 +459,7 @@ export const planGenerator = createServerFn({ method: "POST" })
     // Server-side verification: clamp shot count and normalize durations to sum exactly to the requested total.
     let scenes = plan.scenes.slice(0, range[1]);
     while (scenes.length > range[0] && Math.floor(data.duration / scenes.length) < 3) scenes.pop();
-    if (scenes.length < 2) throw new Error("لم يُنتج النموذج خطة لقطات صالحة. أعد المحاولة.");
+    if (scenes.length < 1) throw new Error("لم يُنتج النموذج خطة لقطات صالحة. أعد المحاولة.");
     const n = scenes.length;
     // Shots overlap by 0.5s crossfades at merge time, so plan slightly longer to land on the requested total.
     const target = data.duration + Math.round((n - 1) * 0.5);
