@@ -139,6 +139,9 @@ export async function createVideo(input: {
         duration: `${input.duration}s`,
         aspect_ratio: input.aspect,
       },
+      // Continuity prompts ("continue directly from…") made the model pick an extend task
+      // with no source clip, failing with "Internal error encountered". Pin the mode.
+      ...(input.images.length ? {} : { generation_config: { video_config: { task: "text_to_video" } } }),
     }),
   });
   if (!res.ok) return failure(res);
