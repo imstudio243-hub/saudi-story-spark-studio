@@ -1,6 +1,6 @@
 import { createFileRoute, Link, Outlet, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
-import { Bot, FolderKanban, LogOut, Mic2, Shield } from "lucide-react";
+import { Bot, Clapperboard, FolderKanban, LogOut, Mic2, Shield } from "lucide-react";
 import { useAuth, useIsAdmin } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Logo, ThemeToggle } from "@/components/Brand";
@@ -12,6 +12,7 @@ export const Route = createFileRoute("/_authenticated")({
 
 const nav = [
   { to: "/dashboard", label: "المشاريع", icon: FolderKanban },
+  { to: "/generator", label: "المولّد", icon: Clapperboard },
   { to: "/chat", label: "iM AI", icon: Bot },
   { to: "/voice", label: "الأصوات", icon: Mic2 },
 ] as const;
