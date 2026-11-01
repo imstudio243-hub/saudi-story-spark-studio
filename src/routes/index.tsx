@@ -11,6 +11,8 @@ export const Route = createFileRoute("/")({
       { name: "description", content: "حوّل صور منتجاتك وشروحاتك إلى فيديوهات إعلانية، وولّد تعليقًا صوتيًا عربيًا وسعوديًا، مع مساعد iM AI." },
       { property: "og:title", content: "iM STUDIO — استوديو الذكاء الاصطناعي الإبداعي" },
       { property: "og:description", content: "فيديوهات إعلانية من الصور، شروحات إلى فيديو، وأصوات عربية بالذكاء الاصطناعي." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: Index,

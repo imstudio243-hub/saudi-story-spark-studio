@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
 export const Route = createFileRoute("/_authenticated/voice")({
-  head: () => ({ meta: [{ title: "الأصوات — iM STUDIO" }, { name: "description", content: "توليد التعليق الصوتي العربي والسعودي." }] }),
+  head: () => ({ meta: [{ title: "الأصوات — iM STUDIO" }, { name: "description", content: "توليد التعليق الصوتي العربي والسعودي." }, { property: "og:title", content: "الأصوات — iM STUDIO" }, { property: "og:description", content: "توليد التعليق الصوتي العربي والسعودي." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary_large_image" }] }),
   component: VoicePage,
 });
 

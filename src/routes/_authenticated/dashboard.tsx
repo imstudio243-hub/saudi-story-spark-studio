@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
-  head: () => ({ meta: [{ title: "مشاريعي — iM STUDIO" }, { name: "description", content: "إدارة مشاريع الإعلانات والفيديو والصوت." }] }),
+  head: () => ({ meta: [{ title: "مشاريعي — iM STUDIO" }, { name: "description", content: "إدارة مشاريع الإعلانات والفيديو والصوت." }, { property: "og:title", content: "مشاريعي — iM STUDIO" }, { property: "og:description", content: "إدارة مشاريع الإعلانات والفيديو والصوت." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary_large_image" }] }),
   component: Dashboard,
 });
 

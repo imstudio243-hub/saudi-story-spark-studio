@@ -16,6 +16,8 @@ export const Route = createFileRoute("/auth")({
       { name: "description", content: "سجّل دخولك أو أنشئ حسابًا في iM STUDIO." },
       { property: "og:title", content: "تسجيل الدخول — iM STUDIO" },
       { property: "og:description", content: "ادخل إلى استوديو الإعلانات والفيديو والصوت." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: AuthPage,

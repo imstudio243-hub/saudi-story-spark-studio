@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
 export const Route = createFileRoute("/_authenticated/projects/$id")({
-  head: () => ({ meta: [{ title: "المشروع — iM STUDIO" }, { name: "description", content: "تفاصيل المشروع وتوليد الفيديو والصوت." }] }),
+  head: () => ({ meta: [{ title: "المشروع — iM STUDIO" }, { name: "description", content: "تفاصيل المشروع وتوليد الفيديو والصوت." }, { property: "og:title", content: "المشروع — iM STUDIO" }, { property: "og:description", content: "تفاصيل المشروع وتوليد الفيديو والصوت." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary_large_image" }] }),
   component: ProjectPage,
 });
 

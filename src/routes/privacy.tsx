@@ -8,6 +8,8 @@ export const Route = createFileRoute("/privacy")({
       { name: "description", content: "كيف تتعامل منصة iM STUDIO مع حسابك وملفاتك ومخرجات الذكاء الاصطناعي." },
       { property: "og:title", content: "سياسة الخصوصية — iM STUDIO" },
       { property: "og:description", content: "كيف نحفظ ملفاتك ونستخدم خدمات الذكاء الاصطناعي." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: Privacy,

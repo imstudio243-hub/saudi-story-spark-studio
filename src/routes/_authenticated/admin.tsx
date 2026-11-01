@@ -8,7 +8,7 @@ import { useAuth, useIsAdmin } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/_authenticated/admin")({
-  head: () => ({ meta: [{ title: "الإدارة — iM STUDIO" }, { name: "description", content: "حالة الخدمات وإحصاءات الاستخدام." }] }),
+  head: () => ({ meta: [{ title: "الإدارة — iM STUDIO" }, { name: "description", content: "حالة الخدمات وإحصاءات الاستخدام." }, { property: "og:title", content: "الإدارة — iM STUDIO" }, { property: "og:description", content: "حالة الخدمات وإحصاءات الاستخدام." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary_large_image" }] }),
   component: AdminPage,
 });
 
