@@ -96,8 +96,6 @@ function Dashboard() {
           })}
         </div>
       )}
-        </div>
-      )}
     </div>
   );
 }
