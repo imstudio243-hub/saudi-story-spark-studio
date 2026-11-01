@@ -54,10 +54,11 @@ export async function mergeScenes(
   onProgress?.("جارٍ تجهيز المشاهد…");
   const vList: string[] = [];
   for (let i = 0; i < scenes.length; i++) {
+    const scene = scenes[i]!;
     const name = `v${i}.mp4`;
-    f.FS("writeFile", name, await fetchBytes(scenes[i].videoUrl));
+    f.FS("writeFile", name, await fetchBytes(scene.videoUrl));
     vList.push(`file '${name}'`);
-    if (withAudio) f.FS("writeFile", `a${i}.wav`, await fetchBytes(scenes[i].audioUrl!));
+    if (withAudio) f.FS("writeFile", `a${i}.wav`, await fetchBytes(scene.audioUrl!));
   }
   f.FS("writeFile", "vlist.txt", new TextEncoder().encode(vList.join("\n")));
 

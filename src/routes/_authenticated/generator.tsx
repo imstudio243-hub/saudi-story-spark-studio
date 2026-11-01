@@ -174,13 +174,14 @@ function GeneratorPage() {
     if (!plan || !projectId) return false;
     setScene(i, { status: "rendering", error: undefined });
     try {
+      const scene = plan.scenes[i]!;
       const { jobId } = await startSceneVideo({
         data: {
           projectId,
           sceneIndex: i,
-          prompt: plan.scenes[i].video_prompt,
+          prompt: scene.video_prompt,
           assetIds: refImages.map((r) => r.id).slice(0, 3),
-          duration: plan.scenes[i].duration,
+          duration: scene.duration,
           aspect,
           resolution,
         },
@@ -206,7 +207,7 @@ function GeneratorPage() {
       setScene(i, { status: "voicing", videoUrl, videoAssetId: va?.id });
 
       await generateSceneVoice({
-        data: { projectId, sceneIndex: i, text: plan.scenes[i].voiceover, voice, dialect, delivery, pace },
+        data: { projectId, sceneIndex: i, text: scene.voiceover, voice, dialect, delivery, pace },
       });
       const { data: aa } = await supabase
         .from("assets")
