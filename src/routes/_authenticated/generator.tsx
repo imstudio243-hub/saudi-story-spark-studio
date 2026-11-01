@@ -98,6 +98,8 @@ function GeneratorPage() {
       if (gs?.pace) setPace(gs.pace);
       if (gs?.aspect) setAspect(gs.aspect);
       if (gs?.resolution) setResolution(gs.resolution);
+      const brief = (p.data as any)?.styleBrief as string | undefined;
+      if (brief) setStyleBrief(brief);
       const { data: assets } = await supabase
         .from("assets")
         .select("id,kind,mime,storage_path,meta")
@@ -194,6 +196,55 @@ function GeneratorPage() {
       toast.error(e.message || "تعذر رفع الصور");
     } finally {
       setBusy(false);
+    }
+  }
+
+  // Small square attach button: image → reference image; video → extract frames,
+  // upload them, then analyze the reference style so the plan mimics it.
+  async function uploadReference(files: FileList | null) {
+    const file = files?.[0];
+    if (!file) return;
+    if (file.type.startsWith("image/")) return uploadRefs(files);
+    if (!file.type.startsWith("video/")) { toast.error("اختر صورة أو فيديو مرجعيًا"); return; }
+    setAnalyzing(true);
+    try {
+      let pid = projectId;
+      if (!pid) {
+        const { data: proj, error } = await supabase
+          .from("projects")
+          .insert({ name: description.slice(0, 60) || "فيديو من وصف", kind: "generator" })
+          .select()
+          .single();
+        if (error || !proj) throw new Error("تعذر إنشاء المشروع");
+        pid = proj.id;
+        setProjectId(pid);
+        navigate({ to: "/generator", search: { project: pid }, replace: true });
+      }
+      const { extractVideoFrames } = await import("@/lib/video-frames");
+      const frames = await extractVideoFrames(file, 6);
+      const { data: u } = await supabase.auth.getUser();
+      if (!u.user) throw new Error("الجلسة غير صالحة");
+      const ids: string[] = [];
+      for (const frame of frames) {
+        const path = `${u.user.id}/${pid}/${crypto.randomUUID()}.jpg`;
+        const { error } = await supabase.storage.from("studio").upload(path, frame.blob, { contentType: frame.mime });
+        if (error) throw error;
+        const { data: asset } = await supabase
+          .from("assets")
+          .insert({ project_id: pid, kind: "image", source: "uploaded", storage_path: path, mime: frame.mime, size: frame.blob.size, meta: { refRole: "video-frame", frameAt: frame.at } })
+          .select()
+          .single();
+        if (!asset) throw new Error("تعذر حفظ إطار من الفيديو");
+        ids.push(asset.id);
+      }
+      toast.success("تم استخراج لقطات الفيديو — جارٍ تحليل أسلوبه…");
+      const { brief } = await analyzeFn({ data: { projectId: pid, assetIds: ids } });
+      setStyleBrief(brief);
+      toast.success("تم فهم أسلوب الفيديو — سيُقلَّد في إعلانك");
+    } catch (e: any) {
+      toast.error(e.message || "تعذر تحليل الفيديو المرجعي");
+    } finally {
+      setAnalyzing(false);
     }
   }
 
