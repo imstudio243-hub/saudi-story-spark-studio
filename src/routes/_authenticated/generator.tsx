@@ -40,7 +40,7 @@ async function sign(path: string) {
 
 const STATUS_LABEL: Record<SceneState["status"], string> = {
   pending: "بانتظار الدور",
-  rendering: "جارٍ توليد المشهد…",
+  rendering: "جارٍ توليد اللقطة…",
   voicing: "جارٍ توليد الصوت…",
   ready: "جاهز",
   failed: "فشل — أعد المحاولة",
@@ -158,7 +158,7 @@ function GeneratorPage() {
       setPlan(p);
       setScenes(p.scenes.map(() => ({ status: "pending" })));
       setStep("plan");
-      toast.success("تم إنشاء خطة المشاهد — راجعها ثم ابدأ التوليد");
+      toast.success("تم إنشاء خطة اللقطات — راجعها ثم ابدأ التوليد");
     } catch (e: any) {
       toast.error(e.message || "فشل إنشاء الخطة");
     } finally {
@@ -192,7 +192,7 @@ function GeneratorPage() {
         await new Promise((r) => setTimeout(r, 5000));
         const r = await pollJob({ data: { jobId } });
         if (r.status === "completed") break;
-        if (r.status === "failed") throw new Error((r as any).error || "فشل توليد المشهد");
+        if (r.status === "failed") throw new Error((r as any).error || "فشل توليد اللقطة");
       }
       const { data: va } = await supabase
         .from("assets")
@@ -238,7 +238,7 @@ function GeneratorPage() {
       await renderScene(i);
     }
     setStep("done");
-    toast.success("اكتمل توليد جميع المشاهد");
+    toast.success("اكتمل توليد جميع اللقطات");
   }
 
   async function retryScene(i: number) {
@@ -254,7 +254,7 @@ function GeneratorPage() {
   async function downloadMerged() {
     const ready = scenes.filter((s) => s.status === "ready" && s.videoUrl);
     if (ready.length !== scenes.length || !ready.length) {
-      toast.error("يجب اكتمال جميع المشاهد قبل الدمج");
+      toast.error("يجب اكتمال جميع اللقطات قبل الدمج");
       return;
     }
     setMerging("جارٍ التحضير…");
@@ -272,7 +272,7 @@ function GeneratorPage() {
       URL.revokeObjectURL(url);
       toast.success("تم تنزيل الفيديو النهائي");
     } catch (e: any) {
-      toast.error(e.message || "تعذر الدمج في المتصفح — نزّل المشاهد منفصلة من الأسفل");
+      toast.error(e.message || "تعذر الدمج في المتصفح — نزّل اللقطات منفصلة من الأسفل");
     } finally {
       setMerging(null);
     }
@@ -385,7 +385,7 @@ function GeneratorPage() {
         </div>
 
         <Button variant="luxe" onClick={makePlan} disabled={busy || description.trim().length < 10 || step === "generating"} className="h-11 w-full">
-          {busy && step === "describe" ? <Loader2 className="animate-spin" /> : <Sparkles />} {plan ? "أعد إنشاء الخطة" : "أنشئ خطة المشاهد"}
+          {busy && step === "describe" ? <Loader2 className="animate-spin" /> : <Sparkles />} {plan ? "أعد إنشاء الخطة" : "أنشئ خطة اللقطات"}
         </Button>
       </section>
 
@@ -402,7 +402,7 @@ function GeneratorPage() {
               return (
                 <div key={i} className="glass space-y-2 rounded-xl p-4">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="font-bold">مشهد {i + 1}: {s.title} <span className="text-xs font-normal text-muted-foreground">({s.duration} ث)</span></p>
+                    <p className="font-bold">لقطة {i + 1}: {s.title} <span className="text-xs font-normal text-muted-foreground">({s.duration} ث)</span></p>
                     {st && step !== "describe" && step !== "plan" && (
                       <span className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs ${st.status === "ready" ? "bg-emerald-500/15 text-emerald-400" : st.status === "failed" ? "bg-red-500/15 text-red-400" : "bg-gold/15 text-gold"}`}>
                         {(st.status === "rendering" || st.status === "voicing") && <Loader2 className="h-3 w-3 animate-spin" />}
@@ -416,7 +416,7 @@ function GeneratorPage() {
                     <div className="flex items-center gap-3">
                       <p className="text-xs text-red-400">{st.error}</p>
                       <Button size="sm" variant="outline" onClick={() => retryScene(i)} disabled={busy}>
-                        <RefreshCw className="h-3.5 w-3.5" /> إعادة توليد المشهد
+                        <RefreshCw className="h-3.5 w-3.5" /> إعادة توليد اللقطة
                       </Button>
                     </div>
                   )}
@@ -426,12 +426,12 @@ function GeneratorPage() {
           </div>
           {step === "plan" && (
             <Button variant="luxe" onClick={generateAll} disabled={busy} className="h-11 w-full">
-              <Clapperboard /> ابدأ توليد الفيديو ({plan.scenes.length} {plan.scenes.length === 1 ? "مشهد" : "مشاهد"} + الصوت)
+              <Clapperboard /> ابدأ توليد الفيديو ({plan.scenes.length} {plan.scenes.length === 1 ? "لقطة" : "لقطات"} + الصوت)
             </Button>
           )}
           {step === "generating" && (
             <p className="text-center text-sm text-muted-foreground">
-              جارٍ التوليد… تُولَّد المشاهد بالتتابع وقد يستغرق كل مشهد بضع دقائق. يمكنك مغادرة الصفحة والعودة لاحقًا.
+              جارٍ التوليد… تُولَّد اللقطات بالتتابع وقد يستغرق كل لقطة بضع دقائق. يمكنك مغادرة الصفحة والعودة لاحقًا.
             </p>
           )}
         </section>
@@ -447,13 +447,13 @@ function GeneratorPage() {
               {merging ? <Loader2 className="animate-spin" /> : <Download />} {merging ?? "تنزيل الفيديو النهائي (مدمج بالصوت)"}
             </Button>
           </div>
-          {!allReady && <p className="text-xs text-muted-foreground">زر الدمج يُفعَّل بعد اكتمال جميع المشاهد. يمكنك تنزيل أي مشهد جاهز منفردًا:</p>}
+          {!allReady && <p className="text-xs text-muted-foreground">زر الدمج يُفعَّل بعد اكتمال جميع اللقطات. يمكنك تنزيل أي لقطة جاهز منفردًا:</p>}
           <div className="flex flex-wrap gap-3">
             {scenes.map(
               (s, i) =>
                 s.videoUrl && (
                   <a key={i} href={s.videoUrl} download className="text-sm text-gold hover:underline">
-                    تنزيل مشهد {i + 1}
+                    تنزيل لقطة {i + 1}
                   </a>
                 ),
             )}
@@ -526,12 +526,12 @@ function ScenePlayer({ scenes, aspect }: { scenes: SceneState[]; aspect: "16:9" 
               setPlaying(true);
             }}
             className={`h-2 rounded-full transition-all ${j === idx ? "w-6 bg-gold" : "w-2 bg-border"}`}
-            aria-label={`مشهد ${s.i + 1}`}
+            aria-label={`لقطة ${s.i + 1}`}
           />
         ))}
       </div>
       <p className="text-center text-xs text-muted-foreground">
-        مشهد {cur.i + 1} من {ready.length} {cur.audioUrl ? "· بتعليق صوتي" : "· بدون صوت بعد"}
+        لقطة {cur.i + 1} من {ready.length} {cur.audioUrl ? "· بتعليق صوتي" : "· بدون صوت بعد"}
       </p>
     </div>
   );
