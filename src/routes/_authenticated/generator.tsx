@@ -418,6 +418,7 @@ function GeneratorPage() {
                   </div>
                   <p className="text-sm text-muted-foreground">{s.description}</p>
                   <p className="text-sm"><span className="text-muted-foreground">التعليق الصوتي: </span>{s.voiceover}</p>
+                  {s.transition && <p className="text-xs text-muted-foreground"><span className="text-gold">الانتقال: </span>{s.transition}</p>}
                   {st?.status === "failed" && (
                     <div className="flex items-center gap-3">
                       <p className="text-xs text-red-400">{st.error}</p>
