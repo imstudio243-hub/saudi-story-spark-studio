@@ -176,7 +176,7 @@ export const pollJob = createServerFn({ method: "POST" })
       const input = job.input as any;
       const { data: asset } = await supabase
         .from("assets")
-        .insert({ user_id: userId, project_id: job.project_id!, kind: "video", source: "generated", storage_path: path, mime: "video/mp4", size: bytes.byteLength, meta: { duration: input.duration, aspect: input.aspect, resolution: input.resolution, jobId: job.id } })
+        .insert({ user_id: userId, project_id: job.project_id!, kind: "video", source: "generated", storage_path: path, mime: "video/mp4", size: bytes.byteLength, meta: { duration: input.duration, aspect: input.aspect, resolution: input.resolution, jobId: job.id, ...(input.sceneIndex !== undefined ? { sceneIndex: input.sceneIndex } : {}) } })
         .select()
         .single();
       await supabase.from("generation_jobs").update({ status: "completed", output_asset_id: asset?.id ?? null, updated_at: new Date().toISOString() }).eq("id", job.id);
