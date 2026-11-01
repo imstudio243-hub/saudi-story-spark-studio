@@ -157,6 +157,24 @@ export async function downloadVideo(id: string) {
   return res.arrayBuffer();
 }
 
+/**
+ * Some long, effect-heavy scene prompts fail deterministically on the provider with
+ * "Internal error encountered" while simpler wording of the same scene succeeds.
+ * Rewrite once into a concise prompt that keeps the character, style and action.
+ */
+export async function simplifyVideoPrompt(prompt: string) {
+  const text = await respond({
+    instructions:
+      "You rewrite a failing text-to-video prompt so a video model can render it. Keep the same character description (face, hair, clothes, colors), the same environment, lighting and art style, the same main action and camera move, and the audio direction. Remove references to other time intervals, the overall ad, or continuing from previous clips; write it as one self-contained shot ('in a single continuous shot'). Describe electricity or lightning only as soft glowing light ribbons that never touch the person. Keep exclusions such as no text, no logos, no dialogue. Plain English, at most 90 words. Return only the prompt.",
+    messages: [{ role: "user", content: prompt }],
+  });
+  return text.trim().slice(0, 1500);
+}
+
+export function isProviderInternalError(message: string | undefined) {
+  return /internal error/i.test(message ?? "");
+}
+
 // ---------- Speech ----------
 export async function synthesize(text: string, voice: string) {
   const res = await fetch(`${BASE}/audio/speech`, {
