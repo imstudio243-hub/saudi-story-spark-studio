@@ -50,19 +50,20 @@ export async function mergeScenes(
   const withAudio = scenes.every((s) => s.audioUrl);
 
   onProgress?.("جارٍ تجهيز اللقطات…");
-  const args: string[] = [];
   const cleanup: string[] = [];
   for (let i = 0; i < n; i++) {
     const scene = scenes[i]!;
     await f.writeFile(`v${i}.mp4`, await fetchBytes(scene.videoUrl));
-    args.push("-i", `v${i}.mp4`);
     cleanup.push(`v${i}.mp4`);
     if (withAudio) {
       await f.writeFile(`a${i}.wav`, await fetchBytes(scene.audioUrl!));
-      args.push("-i", `a${i}.wav`);
       cleanup.push(`a${i}.wav`);
     }
   }
+  // Inputs grouped: videos 0..n-1, then audios n..2n-1 (filtergraph below relies on this order).
+  const args: string[] = [];
+  for (let i = 0; i < n; i++) args.push("-i", `v${i}.mp4`);
+  if (withAudio) for (let i = 0; i < n; i++) args.push("-i", `a${i}.wav`);
 
   // Video: chained xfade. Offset of join k = sum(durations of shots before k) - k * XFADE.
   let vchain: string;
