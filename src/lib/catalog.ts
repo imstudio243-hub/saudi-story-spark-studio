@@ -22,11 +22,11 @@ export const AD_STYLES = [
 // Gemini Omni video: 3–10s, 16:9 or 9:16, 720p / 1080p (4K exists but is costly; not offered).
 export const DURATIONS = [4, 6, 8, 10] as const;
 
-// AI Video & Voice Generator: total durations built from 10s scenes (model max per clip).
+// AI Video & Voice Generator: total durations split into short shots (model: 3–10s per clip).
 export const GEN_DURATIONS = [
-  { id: 10, label: "10 ثوانٍ", scenes: 1 },
-  { id: 20, label: "20 ثانية", scenes: 2 },
-  { id: 30, label: "30 ثانية", scenes: 3 },
+  { id: 10, label: "10 ثوانٍ", minShots: 3, maxShots: 4 },
+  { id: 20, label: "20 ثانية", minShots: 6, maxShots: 8 },
+  { id: 30, label: "30 ثانية", minShots: 8, maxShots: 12 },
 ] as const;
 
 export type GenScene = {
