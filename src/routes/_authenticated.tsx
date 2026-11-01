@@ -12,6 +12,7 @@ export const Route = createFileRoute("/_authenticated")({
 
 const nav = [
   { to: "/dashboard", label: "المشاريع", icon: FolderKanban },
+  { to: "/generator", label: "المولّد", icon: Clapperboard },
   { to: "/chat", label: "iM AI", icon: Bot },
   { to: "/voice", label: "الأصوات", icon: Mic2 },
 ] as const;

@@ -15,6 +15,7 @@ const KINDS = [
   { id: "ad", label: "إعلان من الصور", icon: Clapperboard },
   { id: "explainer", label: "شرح إلى فيديو", icon: FileVideo },
   { id: "voice", label: "صوت", icon: Mic2 },
+  { id: "generator", label: "فيديو + صوت من وصف", icon: WandSparkles },
 ] as const;
 
 const STATUS: Record<string, string> = { draft: "مسودة" };
