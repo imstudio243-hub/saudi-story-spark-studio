@@ -439,7 +439,8 @@ export const planGenerator = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    const range = ({ 10: [3, 4], 20: [6, 8], 30: [8, 12] } as Record<number, [number, number]>)[data.duration]!;
+    // Economy mode: fewest, longest clips the video model allows (each clip costs credits).
+    const range = ({ 10: [1, 2], 20: [2, 3], 30: [3, 4] } as Record<number, [number, number]>)[data.duration]!;
     const { data: assets } = await supabase
       .from("assets")
       .select("id, storage_path, mime")
