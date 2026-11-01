@@ -35,7 +35,7 @@ function Dashboard() {
   async function create(e: React.FormEvent) {
     e.preventDefault();
     if (kind === "generator") {
-      navigate({ to: "/generator" });
+      navigate({ to: "/generator", search: { project: undefined } });
       return;
     }
     const { data, error } = await supabase.from("projects").insert({ name: name.trim() || "مشروع بدون اسم", kind }).select().single();

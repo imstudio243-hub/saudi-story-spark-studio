@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
 export const Route = createFileRoute("/_authenticated/generator")({
-  validateSearch: (s: Record<string, unknown>) => ({ project: typeof s.project === "string" ? s.project : undefined }),
+  validateSearch: (s: Record<string, unknown>) => ({ project: typeof s["project"] === "string" ? (s["project"] as string) : undefined }),
   head: () => ({
     meta: [
       { title: "مولّد الفيديو والصوت — iM STUDIO" },
@@ -24,11 +24,11 @@ export const Route = createFileRoute("/_authenticated/generator")({
 
 type SceneState = {
   status: "pending" | "rendering" | "voicing" | "ready" | "failed";
-  videoUrl?: string;
-  audioUrl?: string;
-  videoAssetId?: string;
-  audioAssetId?: string;
-  error?: string;
+  videoUrl?: string | undefined;
+  audioUrl?: string | undefined;
+  videoAssetId?: string | undefined;
+  audioAssetId?: string | undefined;
+  error?: string | undefined;
 };
 
 type RefImage = { id: string; url: string; path: string; mime: string };
