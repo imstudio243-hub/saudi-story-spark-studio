@@ -17,7 +17,7 @@ export function captionCues(text: string, start: number, end: number): CaptionCu
   });
 }
 
-export function sceneReady(scene: { videoUrl?: string; audioUrl?: string }) {
+export function sceneReady(scene: { videoUrl?: string | undefined; audioUrl?: string | undefined }) {
   return Boolean(scene.videoUrl && scene.audioUrl);
 }
 

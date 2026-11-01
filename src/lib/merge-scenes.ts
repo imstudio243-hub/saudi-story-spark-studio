@@ -41,7 +41,7 @@ async function fetchBytes(url: string) {
 
 /** Export a narrated MP4 with browser-shaped Arabic captions. */
 export async function mergeScenes(
-  scenes: { videoUrl: string; audioUrl?: string; duration: number; voiceover?: string }[],
+  scenes: { videoUrl: string; audioUrl?: string | undefined; duration: number; voiceover?: string }[],
   onProgress?: (msg: string) => void,
 ): Promise<Blob> {
   if (!scenes.length || scenes.some((s) => !s.audioUrl)) throw new Error("أكمل التعليق الصوتي لكل اللقطات قبل التنزيل.");
