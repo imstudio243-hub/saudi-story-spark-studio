@@ -45,7 +45,7 @@ async function fetchBytes(url: string) {
 
 /** Merge scene videos (+ optional per-scene audio) into a single MP4 blob. */
 export async function mergeScenes(
-  scenes: { videoUrl: string; audioUrl?: string }[],
+  scenes: { videoUrl: string; audioUrl?: string | undefined }[],
   onProgress?: (msg: string) => void,
 ): Promise<Blob> {
   const f = await getFfmpeg(onProgress);
