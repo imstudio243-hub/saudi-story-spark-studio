@@ -436,8 +436,10 @@ export const planGenerator = createServerFn({ method: "POST" })
     while (scenes.length > range[0] && Math.floor(data.duration / scenes.length) < 3) scenes.pop();
     if (scenes.length < 2) throw new Error("لم يُنتج النموذج خطة لقطات صالحة. أعد المحاولة.");
     const n = scenes.length;
-    const base = Math.max(3, Math.floor(data.duration / n));
-    const rem = data.duration - base * n;
+    // Shots overlap by 0.5s crossfades at merge time, so plan slightly longer to land on the requested total.
+    const target = data.duration + Math.round((n - 1) * 0.5);
+    const base = Math.max(3, Math.floor(target / n));
+    const rem = target - base * n;
     plan.scenes = scenes.map((s, i) => ({ ...s, duration: base + (i >= n - rem ? 1 : 0) }));
     const { data: proj } = await supabase.from("projects").select("data").eq("id", data.projectId).single();
     await supabase

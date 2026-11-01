@@ -1,8 +1,11 @@
-// Browser-only scene merger: concatenates scene MP4s + voiceover WAVs into one MP4
-// using ffmpeg.wasm (single-threaded core, no SharedArrayBuffer needed), loaded lazily from CDN.
+// Browser-only scene merger: joins shot MP4s with cinematic crossfades and voiceover WAVs
+// with acrossfades into one MP4, via ffmpeg.wasm (single-threaded core, no SharedArrayBuffer),
+// loaded lazily from CDN.
 
 const FFMPEG_URL = "https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js";
 const CORE_URL = "https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js";
+const XFADE = 0.5; // video crossfade seconds between shots
+const AFADE = 0.3; // audio crossfade seconds
 
 let ffmpeg: any = null;
 let loading: Promise<any> | null = null;
@@ -43,53 +46,73 @@ async function fetchBytes(url: string) {
   return new Uint8Array(await res.arrayBuffer());
 }
 
-/** Merge scene videos (+ optional per-scene audio) into a single MP4 blob. */
+/** Merge shots into a single MP4 with crossfade transitions (continuity instead of hard cuts). */
 export async function mergeScenes(
-  scenes: { videoUrl: string; audioUrl?: string | undefined }[],
+  scenes: { videoUrl: string; audioUrl?: string | undefined; duration: number }[],
   onProgress?: (msg: string) => void,
 ): Promise<Blob> {
   const f = await getFfmpeg(onProgress);
+  const n = scenes.length;
   const withAudio = scenes.every((s) => s.audioUrl);
 
-  onProgress?.("جارٍ تجهيز المشاهد…");
-  const vList: string[] = [];
-  for (let i = 0; i < scenes.length; i++) {
+  onProgress?.("جارٍ تجهيز اللقطات…");
+  const args: string[] = [];
+  const cleanup: string[] = [];
+  for (let i = 0; i < n; i++) {
     const scene = scenes[i]!;
-    const name = `v${i}.mp4`;
-    f.FS("writeFile", name, await fetchBytes(scene.videoUrl));
-    vList.push(`file '${name}'`);
-    if (withAudio) f.FS("writeFile", `a${i}.wav`, await fetchBytes(scene.audioUrl!));
-  }
-  f.FS("writeFile", "vlist.txt", new TextEncoder().encode(vList.join("\n")));
-
-  onProgress?.("جارٍ دمج المشاهد…");
-  await f.run("-f", "concat", "-safe", "0", "-i", "vlist.txt", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-an", "video_all.mp4");
-
-  let outName = "video_all.mp4";
-  if (withAudio) {
-    const aList = scenes.map((_, i) => `file 'a${i}.wav'`).join("\n");
-    f.FS("writeFile", "alist.txt", new TextEncoder().encode(aList));
-    onProgress?.("جارٍ دمج الصوت…");
-    await f.run("-f", "concat", "-safe", "0", "-i", "alist.txt", "-c:a", "aac", "audio_all.m4a");
-    onProgress?.("جارٍ تركيب الفيديو النهائي…");
-    await f.run("-i", "video_all.mp4", "-i", "audio_all.m4a", "-c:v", "copy", "-c:a", "copy", "-shortest", "final.mp4");
-    outName = "final.mp4";
-  }
-
-  const data = f.FS("readFile", outName) as Uint8Array;
-  // Clean up FS for potential re-runs.
-  try {
-    for (let i = 0; i < scenes.length; i++) {
-      f.FS("unlink", `v${i}.mp4`);
-      if (withAudio) f.FS("unlink", `a${i}.wav`);
-    }
-    f.FS("unlink", "vlist.txt");
-    f.FS("unlink", "video_all.mp4");
+    f.FS("writeFile", `v${i}.mp4`, await fetchBytes(scene.videoUrl));
+    args.push("-i", `v${i}.mp4`);
+    cleanup.push(`v${i}.mp4`);
     if (withAudio) {
-      f.FS("unlink", "alist.txt");
-      f.FS("unlink", "audio_all.m4a");
-      f.FS("unlink", "final.mp4");
+      f.FS("writeFile", `a${i}.wav`, await fetchBytes(scene.audioUrl!));
+      args.push("-i", `a${i}.wav`);
+      cleanup.push(`a${i}.wav`);
     }
+  }
+
+  // Video: chained xfade. Offset of join k = sum(durations of shots before k) - k * XFADE.
+  let vchain: string;
+  if (n === 1) {
+    vchain = "[0:v]format=yuv420p[vout]";
+  } else {
+    const parts: string[] = [];
+    let prev = "[0:v]";
+    let cum = 0;
+    for (let i = 1; i < n; i++) {
+      cum += scenes[i - 1]!.duration;
+      const offset = Math.max(0.1, cum - i * XFADE);
+      const out = i === n - 1 ? "[vout]" : `[vx${i}]`;
+      parts.push(`${prev}[${i}:v]xfade=transition=fade:duration=${XFADE}:offset=${offset.toFixed(2)}${out}`);
+      prev = out;
+    }
+    vchain = parts.join(";");
+  }
+
+  // Audio: chained acrossfade so the voiceover flows without clicks or sudden silence.
+  let achain = "";
+  if (withAudio) {
+    if (n === 1) {
+      achain = `[${n}:a]anull[aout]`;
+    } else {
+      const parts: string[] = [];
+      let prev = `[${n}:a]`;
+      for (let i = 1; i < n; i++) {
+        const out = i === n - 1 ? "[aout]" : `[ax${i}]`;
+        parts.push(`${prev}[${n + i}:a]acrossfade=d=${AFADE}${out}`);
+        prev = out;
+      }
+      achain = parts.join(";");
+    }
+  }
+
+  onProgress?.("جارٍ تركيب الفيديو النهائي بالانتقالات…");
+  const fc = withAudio ? `${vchain};${achain}` : vchain;
+  const mapArgs = withAudio ? ["-map", "[vout]", "-map", "[aout]"] : ["-map", "[vout]"];
+  await f.run(...args, "-filter_complex", fc, ...mapArgs, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", "final.mp4");
+
+  const data = f.FS("readFile", "final.mp4") as Uint8Array;
+  try {
+    for (const name of [...cleanup, "final.mp4"]) f.FS("unlink", name);
   } catch {
     /* ignore */
   }

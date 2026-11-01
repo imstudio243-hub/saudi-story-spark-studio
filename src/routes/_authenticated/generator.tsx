@@ -267,7 +267,7 @@ function GeneratorPage() {
     try {
       const { mergeScenes } = await import("@/lib/merge.client");
       const blob = await mergeScenes(
-        ready.map((s) => ({ videoUrl: s.videoUrl!, audioUrl: s.audioUrl })),
+        ready.map((s, idx) => ({ videoUrl: s.videoUrl!, audioUrl: s.audioUrl, duration: plan?.scenes[idx]?.duration ?? 3 })),
         (msg) => setMerging(msg),
       );
       const url = URL.createObjectURL(blob);
