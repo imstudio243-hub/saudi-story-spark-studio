@@ -265,7 +265,7 @@ function GeneratorPage() {
     }
     setMerging("جارٍ التحضير…");
     try {
-      const { mergeScenes } = await import("@/lib/merge.client");
+      const { mergeScenes } = await import("@/lib/merge-scenes");
       const blob = await mergeScenes(
         ready.map((s, idx) => ({ videoUrl: s.videoUrl!, audioUrl: s.audioUrl, duration: plan?.scenes[idx]?.duration ?? 3 })),
         (msg) => setMerging(msg),
