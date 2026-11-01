@@ -19,6 +19,7 @@ async function getFfmpeg(onProgress?: (msg: string) => void) {
     loading = (async () => {
       onProgress?.("جارٍ تحميل أداة الدمج (أول مرة فقط)…");
       const f = new FFmpeg();
+      f.on("log", ({ message }) => console.log("[ffmpeg]", message));
       // Blob URLs bypass the dev server's module interception of /public files.
       const coreURL = await toBlobURL(CORE_URL, "text/javascript");
       const wasmURL = await toBlobURL(wasmAsset.url, "application/wasm");
@@ -103,7 +104,7 @@ export async function mergeScenes(
   const mapArgs = withAudio ? ["-map", "[vout]", "-map", "[aout]"] : ["-map", "[vout]"];
   const ok = await f.exec(
     [...args, "-filter_complex", fc, ...mapArgs, "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", "final.mp4"],
-    300000,
+    600000,
   );
   if (ok !== 0) throw new Error("فشل تركيب الفيديو النهائي.");
 
