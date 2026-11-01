@@ -2,7 +2,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { captionCues, sceneReady } from "@/lib/narration-timeline";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Clapperboard, Download, ImagePlus, Loader2, Pause, Play, RefreshCw, Sparkles, Wand2 } from "lucide-react";
+import { Clapperboard, Download, Film, ImagePlus, Loader2, Pause, Play, Plus, RefreshCw, Sparkles, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { planGenerator, startSceneVideo, generateSceneVoice, pollJob, findRunningSceneJob, analyzeReferenceVideo } from "@/lib/studio.functions";
@@ -61,6 +61,7 @@ function GeneratorPage() {
   const voiceFn = useServerFn(generateSceneVoice);
   const pollFn = useServerFn(pollJob);
   const runningFn = useServerFn(findRunningSceneJob);
+  const analyzeFn = useServerFn(analyzeReferenceVideo);
   const { project: resumeId } = Route.useSearch();
   const navigate = useNavigate();
   const [step, setStep] = useState<"describe" | "plan" | "generating" | "done">("describe");
@@ -78,6 +79,8 @@ function GeneratorPage() {
   const [scenes, setScenes] = useState<SceneState[]>([]);
   const [busy, setBusy] = useState(false);
   const [merging, setMerging] = useState<string | null>(null);
+  const [styleBrief, setStyleBrief] = useState<string | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
   const stopRef = useRef(false);
 
   // Resume an existing generator project. Returns the restored scene states so the
