@@ -341,3 +341,137 @@ export const testServices = createServerFn({ method: "POST" })
       return services.map((s) => ({ ...s, ok: false, error: e.message as string }));
     }
   });
+
+// ---------- AI Video & Voice Generator (text → multi-scene video + voiceover) ----------
+const genPlanSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["title", "logline", "scenes"],
+  properties: {
+    title: { type: "string" },
+    logline: { type: "string" },
+    scenes: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["title", "description", "video_prompt", "voiceover", "duration"],
+        properties: {
+          title: { type: "string" },
+          description: { type: "string" },
+          video_prompt: { type: "string" },
+          voiceover: { type: "string" },
+          duration: { type: "number" },
+        },
+      },
+    },
+  },
+};
+
+const GEN_RULES = `أنت مخرج فيديو محترف في iM STUDIO. مهمتك تحويل وصف المستخدم إلى خطة فيديو متكاملة بالصوت.
+أخرج title وlogline وscenes بالعربية، لكن video_prompt لكل مشهد بالإنجليزية لنموذج توليد الفيديو.
+
+قاعدة الالتزام بالموضوع (أولوية قصوى):
+- افهم وصف المستخدم حرفيًا. كل مشهد يجب أن يخدم الموضوع نفسه من البداية للنهاية. ممنوع الانتقال لموضوع آخر أو إضافة مشاهد عامة لا علاقة لها بالطلب.
+- إذا حدد المستخدم قيودًا (مثل: بدون ظهور أشخاص، هاتف فقط، منتج معين) فالتزم بها في كل مشهد وفي كل video_prompt حرفيًا، وكرر القيد داخل كل موجه.
+- إذا طلب المستخدم شرح تطبيق أو موقع حقيقي ولم تُرفق لقطات شاشة حقيقية: لا تخترع واجهات أو أزرارًا وتعرضها كأنها التطبيق الحقيقي. اجعل المشاهد توضيحية مجردة (هاتف، عناصر مجردة، نصوص) واذكر في description أن المشهد تصوري.
+- إذا أُرفقت صور مرجعية فهي المرجع المطلق: ابدأ كل video_prompt بجملة إلزامية: "The subject in <FIRST_FRAME> must remain 100% identical and unchanged throughout the entire clip: exact same shape, proportions, colors, materials, label, logo, and any text on it. Do NOT redraw, redesign, reinterpret, or generate a different subject. Only the camera, lighting, environment and particles around it may move."
+
+قواعد video_prompt لكل مشهد:
+- مقطع واحد متواصل بمدة المشهد المحددة. صف المشهد والكاميرا والإضاءة والمزاج والموسيقى التصويرية المناسبة.
+- اكتب "No dialogue." لأن التعليق الصوتي يُركَّب لاحقًا.
+- المشاهد مترابطة: كل مشهد يكمل الذي قبله ويخدم الهدف النهائي، مع انتقال منطقي بينها.
+- أضف: "Consider micro-detail, cinematic lighting, realistic reflections and smooth camera motion."
+
+قواعد voiceover لكل مشهد:
+- نص تعليق صوتي عربي يشرح ما يظهر في المشهد نفسه بالتزامن معه.
+- الطول: حوالي كلمتين لكل ثانية من مدة المشهد، لا أكثر، حتى يتسع الصوت للمدة.
+- التعليق كله يلتزم بموضوع الوصف ولا يخرج عنه.`;
+
+export const planGenerator = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(
+    z.object({
+      projectId: z.string().uuid(),
+      description: z.string().min(10).max(6000),
+      duration: z.union([z.literal(10), z.literal(20), z.literal(30)]),
+      assetIds: z.array(z.string().uuid()).max(4).default([]),
+    }),
+  )
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const sceneCount = data.duration / 10;
+    const sceneLen = data.duration / sceneCount;
+    const { data: assets } = await supabase
+      .from("assets")
+      .select("id, storage_path, mime")
+      .eq("project_id", data.projectId)
+      .in("id", data.assetIds.length ? data.assetIds : ["00000000-0000-0000-0000-000000000000"]);
+    const parts: any[] = [];
+    for (const a of assets ?? []) {
+      parts.push({ type: "input_image", image_url: `data:${a.mime};base64,${await readAsset(supabase, a.storage_path)}` });
+    }
+    parts.unshift({
+      type: "input_text",
+      text: `أنشئ خطة فيديو من ${sceneCount} ${sceneCount === 1 ? "مشهد" : "مشاهد"}، مدة كل مشهد ${sceneLen} ثوانٍ بالضبط (المدة الإجمالية ${data.duration} ثانية). وزّع القصة والتعليق الصوتي على المشاهد بشكل متناسق. اكتب رقم المدة في حقل duration لكل مشهد = ${sceneLen}.\n\nوصف المستخدم (التزم به حرفيًا):\n${data.description}`,
+    });
+    const text = await respond({ instructions: GEN_RULES, messages: [{ role: "user", content: parts }], schema: { name: "gen_plan", schema: genPlanSchema } });
+    const plan = JSON.parse(text) as GenPlan;
+    plan.scenes = plan.scenes.slice(0, sceneCount).map((s) => ({ ...s, duration: sceneLen }));
+    const { data: proj } = await supabase.from("projects").select("data").eq("id", data.projectId).single();
+    await supabase
+      .from("projects")
+      .update({ data: { ...((proj?.data as object) ?? {}), genPlan: plan, genSettings: { duration: data.duration } }, updated_at: new Date().toISOString() })
+      .eq("id", data.projectId);
+    await logUsage(supabase, userId, { service: "planning", model: MODELS.text, units: 1, unit: "request" });
+    return plan;
+  });
+
+export const startSceneVideo = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(
+    z.object({
+      projectId: z.string().uuid(),
+      sceneIndex: z.number().int().min(0).max(9),
+      prompt: z.string().min(10).max(4000),
+      assetIds: z.array(z.string().uuid()).max(3).default([]),
+      duration: z.number().int().min(3).max(10),
+      aspect: z.enum(["16:9", "9:16"]),
+      resolution: z.enum(["720p", "1080p"]),
+    }),
+  )
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { data: assets } = await supabase
+      .from("assets")
+      .select("storage_path, mime")
+      .eq("project_id", data.projectId)
+      .in("id", data.assetIds.length ? data.assetIds : ["00000000-0000-0000-0000-000000000000"]);
+    const images = [];
+    for (const a of assets ?? []) images.push({ data: await readAsset(supabase, a.storage_path), mime: a.mime });
+    const { data: job, error } = await supabase
+      .from("generation_jobs")
+      .insert({ user_id: userId, project_id: data.projectId, kind: "video", status: "queued", model: MODELS.video, input: { ...data } })
+      .select()
+      .single();
+    if (error || !job) throw new Error("تعذر إنشاء مهمة التوليد.");
+    try {
+      const fidelity = images.length
+        ? "STRICT SUBJECT FIDELITY: The attached image(s) show the exact real subject. Reproduce it pixel-faithfully — identical shape, colors, label, logo and text. Never invent, morph or replace it. Animate only the camera, light and surroundings.\n\n"
+        : "";
+      const v = await createVideo({ prompt: fidelity + data.prompt, images, duration: data.duration, aspect: data.aspect, resolution: data.resolution });
+      await supabase.from("generation_jobs").update({ provider_job_id: v.id, status: "running", updated_at: new Date().toISOString() }).eq("id", job.id);
+      return { jobId: job.id };
+    } catch (e: any) {
+      await supabase.from("generation_jobs").update({ status: "failed", error: e.message, updated_at: new Date().toISOString() }).eq("id", job.id);
+      throw e;
+    }
+  });
+
+export const generateSceneVoice = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(voiceInput.extend({ sceneIndex: z.number().int().min(0).max(9) }))
+  .handler(async ({ data, context }) => {
+    const asset = await makeVoice(context.supabase, context.userId, data);
+    return { assetId: asset.id as string };
+  });
