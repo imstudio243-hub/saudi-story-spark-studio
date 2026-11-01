@@ -131,7 +131,10 @@ export const startVideo = createServerFn({ method: "POST" })
       .single();
     if (error || !job) throw new Error("تعذر إنشاء مهمة التوليد.");
     try {
-      const v = await createVideo({ prompt: data.prompt, images, duration: data.duration, aspect: data.aspect, resolution: data.resolution });
+      const fidelity = images.length
+        ? "STRICT PRODUCT FIDELITY: The attached image(s) show the exact real product. Reproduce it pixel-faithfully — identical shape, colors, label, logo and text. Never invent, morph or replace the product. Animate only the camera, light and surroundings.\n\n"
+        : "";
+      const v = await createVideo({ prompt: fidelity + data.prompt, images, duration: data.duration, aspect: data.aspect, resolution: data.resolution });
       await supabase.from("generation_jobs").update({ provider_job_id: v.id, status: "running", updated_at: new Date().toISOString() }).eq("id", job.id);
       return { jobId: job.id };
     } catch (e: any) {
