@@ -407,8 +407,7 @@ export const planGenerator = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    const sceneCount = data.duration / 10;
-    const sceneLen = data.duration / sceneCount;
+    const range = { 10: [3, 4], 20: [6, 8], 30: [8, 12] }[data.duration as 10 | 20 | 30]!;
     const { data: assets } = await supabase
       .from("assets")
       .select("id, storage_path, mime")
@@ -420,11 +419,18 @@ export const planGenerator = createServerFn({ method: "POST" })
     }
     parts.unshift({
       type: "input_text",
-      text: `أنشئ خطة فيديو من ${sceneCount} ${sceneCount === 1 ? "مشهد" : "مشاهد"}، مدة كل مشهد ${sceneLen} ثوانٍ بالضبط (المدة الإجمالية ${data.duration} ثانية). وزّع القصة والتعليق الصوتي على المشاهد بشكل متناسق. اكتب رقم المدة في حقل duration لكل مشهد = ${sceneLen}.\n\nوصف المستخدم (التزم به حرفيًا):\n${data.description}`,
+      text: `أنشئ خطة فيديو من ${range[0]} إلى ${range[1]} لقطة قصيرة مترابطة ومتنوعة (المدة الإجمالية ${data.duration} ثانية بالضبط). مدة كل لقطة بين 3 و10 ثوانٍ، ومجموع مدد اللقطات يساوي ${data.duration} بالضبط. وزّع القصة والتعليق الصوتي على اللقطات كاملة بشكل متناسق.\n\nوصف المستخدم (التزم به حرفيًا):\n${data.description}`,
     });
     const text = await respond({ instructions: GEN_RULES, messages: [{ role: "user", content: parts }], schema: { name: "gen_plan", schema: genPlanSchema } });
     const plan = JSON.parse(text) as GenPlan;
-    plan.scenes = plan.scenes.slice(0, sceneCount).map((s) => ({ ...s, duration: sceneLen }));
+    // Server-side verification: clamp shot count and normalize durations to sum exactly to the requested total.
+    let scenes = plan.scenes.slice(0, range[1]);
+    while (scenes.length > range[0] && Math.floor(data.duration / scenes.length) < 3) scenes.pop();
+    if (scenes.length < 2) throw new Error("لم يُنتج النموذج خطة لقطات صالحة. أعد المحاولة.");
+    const n = scenes.length;
+    const base = Math.max(3, Math.floor(data.duration / n));
+    const rem = data.duration - base * n;
+    plan.scenes = scenes.map((s, i) => ({ ...s, duration: base + (i >= n - rem ? 1 : 0) }));
     const { data: proj } = await supabase.from("projects").select("data").eq("id", data.projectId).single();
     await supabase
       .from("projects")
@@ -439,7 +445,7 @@ export const startSceneVideo = createServerFn({ method: "POST" })
   .inputValidator(
     z.object({
       projectId: z.string().uuid(),
-      sceneIndex: z.number().int().min(0).max(9),
+      sceneIndex: z.number().int().min(0).max(14),
       prompt: z.string().min(10).max(4000),
       assetIds: z.array(z.string().uuid()).max(3).default([]),
       duration: z.number().int().min(3).max(10),
@@ -477,7 +483,7 @@ export const startSceneVideo = createServerFn({ method: "POST" })
 
 export const generateSceneVoice = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator(voiceInput.extend({ sceneIndex: z.number().int().min(0).max(9) }))
+  .inputValidator(voiceInput.extend({ sceneIndex: z.number().int().min(0).max(14) }))
   .handler(async ({ data, context }) => {
     const asset = await makeVoice(context.supabase, context.userId, data);
     return { assetId: asset.id as string };

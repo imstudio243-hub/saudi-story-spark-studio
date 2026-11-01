@@ -303,7 +303,7 @@ function GeneratorPage() {
             <Label>مدة الفيديو</Label>
             <select value={duration} onChange={(e) => setDuration(Number(e.target.value) as 10 | 20 | 30)} className={selectCls} disabled={step === "generating"}>
               {GEN_DURATIONS.map((d) => (
-                <option key={d.id} value={d.id}>{d.label} ({d.scenes} {d.scenes === 1 ? "مشهد" : "مشاهد"})</option>
+                <option key={d.id} value={d.id}>{d.label} · {d.minShots}–{d.maxShots} لقطات</option>
               ))}
             </select>
           </div>
