@@ -7,7 +7,7 @@ import { chatSend } from "@/lib/studio.functions";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/_authenticated/chat")({
-  head: () => ({ meta: [{ title: "iM AI — iM STUDIO" }, { name: "description", content: "المساعد الذكي لإنشاء المشاريع والأصوات." }] }),
+  head: () => ({ meta: [{ title: "iM AI — iM STUDIO" }, { name: "description", content: "المساعد الذكي لإنشاء المشاريع والأصوات." }, { property: "og:title", content: "iM AI — iM STUDIO" }, { property: "og:description", content: "المساعد الذكي لإنشاء المشاريع والأصوات." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary_large_image" }] }),
   component: ChatPage,
 });
 
