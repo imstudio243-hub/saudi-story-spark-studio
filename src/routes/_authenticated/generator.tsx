@@ -145,8 +145,8 @@ function GeneratorPage() {
     if (resumeId) {
       // Leaving the page never cancels provider-side jobs; on return, re-attach to
       // running jobs and continue the remaining scenes automatically.
-      void resume(resumeId).then((states) => {
-        if (states?.some((s) => s.status !== "ready")) generateAllRef.current?.();
+      void resume(resumeId).then((r) => {
+        if (r?.states.some((s) => s.status !== "ready")) generateAllRef.current?.(r.plan, r.states);
       });
     }
     return () => {
@@ -158,8 +158,8 @@ function GeneratorPage() {
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState === "visible" && projectId && !busy) {
-        void resume(projectId).then((states) => {
-          if (states?.some((s) => s.status !== "ready")) generateAllRef.current?.();
+        void resume(projectId).then((r) => {
+          if (r?.states.some((s) => s.status !== "ready")) generateAllRef.current?.(r.plan, r.states);
         });
       }
     };
