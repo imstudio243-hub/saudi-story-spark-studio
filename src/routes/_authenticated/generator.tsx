@@ -175,17 +175,23 @@ function GeneratorPage() {
     setScene(i, { status: "rendering", error: undefined });
     try {
       const scene = plan.scenes[i]!;
-      const { jobId } = await startSceneVideo({
-        data: {
-          projectId,
-          sceneIndex: i,
-          prompt: scene.video_prompt,
-          assetIds: refImages.map((r) => r.id).slice(0, 3),
-          duration: scene.duration,
-          aspect,
-          resolution,
-        },
-      });
+      // Re-attach to a still-running job for this shot (e.g. after leaving the page) instead of duplicating it.
+      const existing = await findRunningSceneJob({ data: { projectId, sceneIndex: i } });
+      let jobId = existing.jobId;
+      if (!jobId) {
+        const started = await startSceneVideo({
+          data: {
+            projectId,
+            sceneIndex: i,
+            prompt: scene.video_prompt,
+            assetIds: refImages.map((r) => r.id).slice(0, 3),
+            duration: scene.duration,
+            aspect,
+            resolution,
+          },
+        });
+        jobId = started.jobId;
+      }
       // Poll until this scene's video is stored.
       for (;;) {
         if (stopRef.current) return false;
