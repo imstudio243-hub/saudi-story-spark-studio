@@ -159,7 +159,7 @@ function GeneratorPage() {
     const onVisible = () => {
       if (document.visibilityState === "visible" && projectId && !busy) {
         void resume(projectId).then((r) => {
-          if (r?.states.some((s) => s.status !== "ready")) generateAllRef.current?.(r.plan, r.states);
+          if (r?.states.some((s: SceneState) => s.status !== "ready")) generateAllRef.current?.(r.plan, r.states);
         });
       }
     };
@@ -280,7 +280,7 @@ function GeneratorPage() {
     }
   }
 
-  async function generateAll(p: GenPlan | undefined = plan, states: SceneState[] | undefined = undefined) {
+  async function generateAll(p?: GenPlan | null, states?: SceneState[]) {
     const activePlan = p ?? plan;
     if (!activePlan || busy) return;
     setBusy(true);
