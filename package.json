@@ -20,6 +20,7 @@
     "@ffmpeg/core": "0.12.10",
     "@ffmpeg/core-st": "0.11.1",
     "@ffmpeg/ffmpeg": "0.12.15",
+    "@ffmpeg/util": "0.12.1",
     "@hookform/resolvers": "^5.2.2",
     "@lovable.dev/cloud-auth-js": "^1.1.2",
     "@radix-ui/react-accordion": "^1.2.12",
