@@ -3,7 +3,7 @@
 // loaded lazily from CDN.
 
 const FFMPEG_URL = "https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js";
-const CORE_URL = "https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js";
+const CORE_URL = "https://unpkg.com/@ffmpeg/core-st@0.11.0/dist/ffmpeg-core.js";
 const XFADE = 0.5; // video crossfade seconds between shots
 const AFADE = 0.3; // audio crossfade seconds
 
