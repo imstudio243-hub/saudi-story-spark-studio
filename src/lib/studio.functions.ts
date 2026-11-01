@@ -45,7 +45,9 @@ const planSchema = {
 const PLAN_RULES = `أنت مخرج إعلانات محترف في iM STUDIO. اكتب خطة إعلان بالعربية (product, style, audience, headline, scenes, voiceover, caption) لكن اكتب video_prompt بالإنجليزية لنموذج توليد الفيديو.
 قواعد video_prompt:
 - مقطع واحد متواصل بمدة محددة، صف المشهد والكاميرا والإضاءة والمزاج والصوت الموسيقي.
-- إذا توفرت صورة منتج: استخدم الوسم <FIRST_FRAME> وقل صراحة: "Keep the product exactly as in <FIRST_FRAME>: same shape, colors, logo and label. Do not alter, redraw or add any text or logos on the product." وأضف الحركة حول المنتج (كاميرا، جزيئات، إضاءة، انعكاسات) بدل تغييره.
+- إذا توفرت صورة منتج فهي المرجع المطلق. ابدأ video_prompt بجملة إلزامية: "The product in <FIRST_FRAME> must remain 100% identical and unchanged throughout the entire video: exact same shape, proportions, colors, materials, label, logo, and any text on it. Do NOT redraw, redesign, reinterpret, beautify, or generate a different product. Only the camera, lighting, environment and particles around the product may move."
+- ثم صف المنتج بدقة من الصورة بالإنجليزية (شكل العبوة، لونها، نوع الغطاء، نص الملصق حرفيًا) ليكون مرساة نصية تمنع الانحراف.
+- الحركة حول المنتج فقط: دوران كاميرا بطيء، جزيئات، إضاءة، انعكاسات. المنتج نفسه ثابت ولا يتشوه ولا يتغير.
 - لا تكتب نصوصًا على الشاشة إلا إذا اقتبست العنوان حرفيًا. "No dialogue." لأن التعليق الصوتي يُضاف لاحقًا.
 - استخدم توقيتات مثل [0-3s] لتقسيم المشاهد داخل المقطع.
 - أضف: "Consider micro-detail, cinematic lighting, realistic reflections and smooth camera motion."
