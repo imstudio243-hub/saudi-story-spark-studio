@@ -8,7 +8,7 @@ export const MODELS = {
 } as const;
 
 function key() {
-  const k = process.env.LOVABLE_API_KEY;
+  const k = process.env['LOVABLE_API_KEY'];
   if (!k) throw new Error("خدمة الذكاء الاصطناعي غير مهيأة (المفتاح غير موجود).");
   return k;
 }
@@ -76,7 +76,7 @@ export async function respond(opts: {
     reasoning: { effort: "low" },
   };
   if (opts.schema) {
-    body.text = { format: { type: "json_schema", name: opts.schema.name, schema: opts.schema.schema, strict: true } };
+    body['text'] = { format: { type: "json_schema", name: opts.schema.name, schema: opts.schema.schema, strict: true } };
   }
   const res = await fetch(`${BASE}/responses`, { method: "POST", headers: headers(), body: JSON.stringify(body) });
   if (!res.ok || !res.body) return failure(res);

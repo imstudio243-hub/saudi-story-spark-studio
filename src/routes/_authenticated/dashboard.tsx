@@ -34,7 +34,7 @@ function Dashboard() {
   async function create(e: React.FormEvent) {
     e.preventDefault();
     const { data, error } = await supabase.from("projects").insert({ name: name.trim() || "مشروع بدون اسم", kind }).select().single();
-    if (error) return toast.error("تعذر إنشاء المشروع");
+    if (error) { toast.error("تعذر إنشاء المشروع"); return; }
     navigate({ to: "/projects/$id", params: { id: data.id } });
   }
 
