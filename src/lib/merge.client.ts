@@ -19,7 +19,10 @@ async function getFfmpeg(onProgress?: (msg: string) => void) {
     loading = (async () => {
       onProgress?.("جارٍ تحميل أداة الدمج (أول مرة فقط)…");
       const f = new FFmpeg();
-      await f.load({ coreURL: CORE_URL, wasmURL: wasmAsset.url });
+      // Blob URLs bypass the dev server's module interception of /public files.
+      const coreURL = await toBlobURL(CORE_URL, "text/javascript");
+      const wasmURL = await toBlobURL(wasmAsset.url, "application/wasm");
+      await f.load({ coreURL, wasmURL });
       ffmpeg = f;
       return f;
     })();
