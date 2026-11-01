@@ -349,7 +349,8 @@ function GeneratorPage() {
         if (stopRef.current) return;
         const known = states?.[i] ?? scenes[i];
         if (known?.status === "ready" && known?.voice === voice && known?.dialect === dialect && known?.delivery === delivery && known?.pace === pace) continue;
-        if (!await renderScene(i, false, states?.[i])) { complete = false; break; }
+        // One automatic second attempt per scene before involving the user.
+        if (!await renderScene(i, false, states?.[i]) && !await renderScene(i, false)) { complete = false; break; }
       }
       setStep("done");
       if (complete) toast.success("اكتمل الفيديو والتعليق الصوتي");

@@ -5,6 +5,7 @@ import {
   MODELS,
   createVideo,
   simplifyVideoPrompt,
+  minimalVideoPrompt,
   isProviderInternalError,
   downloadVideo,
   getVideo,
