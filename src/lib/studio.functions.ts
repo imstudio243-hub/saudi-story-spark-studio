@@ -407,7 +407,7 @@ export const planGenerator = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    const range = { 10: [3, 4], 20: [6, 8], 30: [8, 12] }[data.duration as 10 | 20 | 30]!;
+    const range = ({ 10: [3, 4], 20: [6, 8], 30: [8, 12] } as Record<number, [number, number]>)[data.duration]!;
     const { data: assets } = await supabase
       .from("assets")
       .select("id, storage_path, mime")
