@@ -3,6 +3,7 @@
 // same-origin, no SharedArrayBuffer needed). Loaded lazily on first export.
 
 import { FFmpeg } from "@ffmpeg/ffmpeg";
+import { toBlobURL } from "@ffmpeg/util";
 import wasmAsset from "@/assets/ffmpeg-core.wasm.asset.json";
 
 const CORE_URL = "/ffmpeg/ffmpeg-core.js";
