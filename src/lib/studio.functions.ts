@@ -174,7 +174,7 @@ export const pollJob = createServerFn({ method: "POST" })
         .insert({ user_id: userId, project_id: job.project_id, kind: "video", source: "generated", storage_path: path, mime: "video/mp4", size: bytes.byteLength, meta: { duration: input.duration, aspect: input.aspect, resolution: input.resolution, jobId: job.id } })
         .select()
         .single();
-      await supabase.from("generation_jobs").update({ status: "completed", output_asset_id: asset?.id, updated_at: new Date().toISOString() }).eq("id", job.id);
+      await supabase.from("generation_jobs").update({ status: "completed", output_asset_id: asset?.id ?? null, updated_at: new Date().toISOString() }).eq("id", job.id);
       await logUsage(supabase, userId, { job_id: job.id, service: "video", model: MODELS.video, units: input.duration, unit: "second" });
       return { status: "completed" };
     } catch (e: any) {
