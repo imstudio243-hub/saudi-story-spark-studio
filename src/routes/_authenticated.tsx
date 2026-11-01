@@ -11,6 +11,7 @@ export const Route = createFileRoute("/_authenticated")({
 });
 
 const nav = [
+  { to: "/advertise", label: "إعلانك", icon: Clapperboard },
   { to: "/dashboard", label: "المشاريع", icon: FolderKanban },
   { to: "/generator", label: "المولّد", icon: Clapperboard },
   { to: "/chat", label: "iM AI", icon: Bot },

@@ -1,0 +1,1 @@
+export const AD_VIDEO_PRICE_SAR = 20;

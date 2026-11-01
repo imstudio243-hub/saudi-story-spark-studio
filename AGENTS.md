@@ -12,3 +12,4 @@
 - Keep narration readiness and estimated phrase timing in the browser-safe narration-timeline module; both preview and export use it to avoid silent completion and inconsistent captions.
 - Burn Arabic captions using browser-shaped canvas PNGs in the lazy FFmpeg export, because the bundled core does not guarantee Arabic text shaping or font filters.
 - Preserve selected voice settings in generator project data and overlap speech generation with the existing single-video queue, avoiding duplicate video requests.
+- The client advertising form saves its brief and logo into an owned generator project and uses the existing generator flow; do not represent a quoted price as a completed payment without a verified payment service.
