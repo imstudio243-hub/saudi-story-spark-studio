@@ -7,8 +7,10 @@ export function useAuth() {
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
+    supabase.auth.getUser().then(({ error }) => {
+      if (error) setSession(null);
+      setLoading(false);
+    }).catch(() => {
       setLoading(false);
     });
     return () => sub.subscription.unsubscribe();
@@ -19,8 +21,13 @@ export function useAuth() {
 export function useIsAdmin(userId: string | undefined) {
   const [isAdmin, setIsAdmin] = useState(false);
   useEffect(() => {
+    let active = true;
+    setIsAdmin(false);
     if (!userId) return;
-    supabase.rpc("has_role", { _user_id: userId, _role: "admin" }).then(({ data }) => setIsAdmin(!!data));
+    supabase.rpc("has_role", { _user_id: userId, _role: "admin" }).then(({ data, error }) => {
+      if (active) setIsAdmin(!error && data === true);
+    });
+    return () => { active = false; };
   }, [userId]);
   return isAdmin;
 }

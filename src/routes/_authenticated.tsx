@@ -1,12 +1,17 @@
-import { createFileRoute, Link, Outlet, useNavigate } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { createFileRoute, Link, Outlet, redirect, useNavigate } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { Bot, Clapperboard, FolderKanban, LogOut, Mic2, Shield } from "lucide-react";
 import { useAuth, useIsAdmin } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Logo, ThemeToggle } from "@/components/Brand";
+import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
+  beforeLoad: async () => {
+    const { data, error } = await supabase.auth.getUser();
+    if (error || !data.user) throw redirect({ to: "/auth", replace: true });
+  },
   component: Shell,
 });
 
@@ -22,9 +27,13 @@ function Shell() {
   const { user, loading } = useAuth();
   const isAdmin = useIsAdmin(user?.id);
   const navigate = useNavigate();
-  useEffect(() => {
-    if (!loading && !user) navigate({ to: "/auth" });
-  }, [loading, user, navigate]);
+  const queryClient = useQueryClient();
+  async function signOut() {
+    await queryClient.cancelQueries();
+    queryClient.clear();
+    const { error } = await supabase.auth.signOut();
+    if (!error) await navigate({ to: "/auth", replace: true });
+  }
   if (loading || !user) return <div className="grid min-h-screen place-items-center text-muted-foreground">جارٍ التحميل…</div>;
 
   const items = isAdmin ? [...nav, { to: "/admin", label: "الإدارة", icon: Shield } as const] : nav;
@@ -42,9 +51,9 @@ function Shell() {
           </nav>
           <div className="flex items-center gap-2">
             <ThemeToggle />
-            <button aria-label="تسجيل الخروج" onClick={() => supabase.auth.signOut()} className="glass grid h-9 w-9 place-items-center rounded-xl text-muted-foreground hover:text-foreground">
+            <Button variant="ghost" size="icon" aria-label="تسجيل الخروج" onClick={signOut} className="h-9 w-9 text-muted-foreground">
               <LogOut className="h-4 w-4" />
-            </button>
+            </Button>
           </div>
         </div>
       </header>
