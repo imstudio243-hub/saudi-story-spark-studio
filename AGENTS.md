@@ -9,6 +9,10 @@
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
 
+- Authenticate the existing client-only protected layout with getUser before rendering; root identity transitions invalidate routing and sign-out clears query caches to prevent stale private views.
+- Preserve sessions through the generated auth client and store only the last email in app storage; passwords belong exclusively to browser credential management.
+- Admin diagnostics use authenticated server functions with a stored-role check; never grant roles from login form values or implement arbitrary-password access.
+
 - Keep narration readiness and estimated phrase timing in the browser-safe narration-timeline module; both preview and export use it to avoid silent completion and inconsistent captions.
 - Burn Arabic captions using browser-shaped canvas PNGs in the lazy FFmpeg export, because the bundled core does not guarantee Arabic text shaping or font filters.
 - Preserve selected voice settings in generator project data and overlap speech generation with the existing single-video queue, avoiding duplicate video requests.

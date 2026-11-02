@@ -35,18 +35,23 @@ function AuthPage() {
     if (user) nav({ to: "/dashboard" });
   }, [user, nav]);
 
+  useEffect(() => {
+    try { setEmail(localStorage.getItem("im:last-login-email") ?? ""); } catch { /* Storage can be unavailable. */ }
+  }, []);
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     try {
       if (mode === "up") {
-        const { data, error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: `${window.location.origin}/dashboard` } });
+        const { data, error } = await supabase.auth.signUp({ email: email.trim(), password, options: { emailRedirectTo: window.location.origin } });
         if (error) throw error;
         if (!data.session) toast.success("تم إنشاء الحساب. افتح بريدك لتأكيد الحساب ثم سجّل الدخول.");
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
         if (error) throw error;
       }
+      try { localStorage.setItem("im:last-login-email", email.trim()); } catch { /* Session storage is managed separately. */ }
     } catch (err: any) {
       toast.error(err.message === "Invalid login credentials" ? "البريد أو كلمة المرور غير صحيحة" : err.message);
     } finally {
@@ -64,14 +69,14 @@ function AuthPage() {
       <div className="glass w-full max-w-sm animate-rise rounded-3xl p-7 shadow-luxe">
         <Logo />
         <h1 className="mt-6 text-2xl font-bold">{mode === "in" ? "أهلًا بعودتك" : "أنشئ حسابك"}</h1>
-        <form onSubmit={submit} className="mt-6 space-y-4">
+        <form onSubmit={submit} autoComplete="on" className="mt-6 space-y-4">
           <div className="space-y-2">
             <Label htmlFor="email">البريد الإلكتروني</Label>
-            <Input id="email" type="email" dir="ltr" required value={email} onChange={(e) => setEmail(e.target.value)} />
+            <Input id="email" name="email" autoComplete="username" type="email" dir="ltr" required value={email} onChange={(e) => setEmail(e.target.value)} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="pw">كلمة المرور</Label>
-            <Input id="pw" type="password" dir="ltr" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} />
+            <Input id="pw" name="password" autoComplete={mode === "in" ? "current-password" : "new-password"} type="password" dir="ltr" required minLength={mode === "up" ? 8 : undefined} value={password} onChange={(e) => setPassword(e.target.value)} />
           </div>
           <Button type="submit" variant="luxe" className="h-11 w-full" disabled={busy}>
             {mode === "in" ? "تسجيل الدخول" : "إنشاء الحساب"}
@@ -80,9 +85,9 @@ function AuthPage() {
         <Button variant="glass" className="mt-3 h-11 w-full" onClick={google}>
           المتابعة عبر Google
         </Button>
-        <button className="mt-5 w-full text-sm text-muted-foreground hover:text-foreground" onClick={() => setMode(mode === "in" ? "up" : "in")}>
+        <Button variant="ghost" className="mt-5 w-full text-sm text-muted-foreground" onClick={() => setMode(mode === "in" ? "up" : "in")}>
           {mode === "in" ? "ليس لديك حساب؟ أنشئ حسابًا" : "لديك حساب؟ سجّل الدخول"}
-        </button>
+        </Button>
       </div>
     </div>
   );

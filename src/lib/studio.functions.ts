@@ -15,6 +15,7 @@ import {
   toBase64,
 } from "./ai.server";
 import { AD_STYLES, voiceInstruction, type AdPlan, type GenPlan } from "./catalog";
+import { requireAdminRole } from "./admin-access";
 
 const planSchema = {
   type: "object",
@@ -350,9 +351,21 @@ export const chatSend = createServerFn({ method: "POST" })
 
 // ---------- Admin ----------
 async function assertAdmin(supabase: any, userId: string) {
-  const { data } = await supabase.rpc("has_role", { _user_id: userId, _role: "admin" });
-  if (!data) throw new Error("غير مصرح: هذه الصفحة للمدير فقط.");
+  await requireAdminRole(supabase, userId);
 }
+
+export const getAdminOverview = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await requireAdminRole(context.supabase, context.userId);
+    const [usage, jobs, users] = await Promise.all([
+      context.supabase.from("usage_events").select("service,units,unit,created_at").order("created_at", { ascending: false }).limit(100),
+      context.supabase.from("generation_jobs").select("id,kind,status,model,error,created_at").order("created_at", { ascending: false }).limit(50),
+      context.supabase.from("profiles").select("id", { count: "exact", head: true }),
+    ]);
+    for (const result of [usage, jobs, users]) if (result.error) throw new Error("تعذر تحميل بيانات الإدارة.");
+    return { usage: usage.data ?? [], jobs: jobs.data ?? [], users: users.count ?? 0 };
+  });
 
 export const testServices = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
